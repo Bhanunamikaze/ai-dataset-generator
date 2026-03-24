@@ -58,6 +58,7 @@
 | T28 | Install hardening | Fix the repo URL in `install.sh`, add checksum-based remote-install guidance, and publish `install.sh.sha256`. | `completed` |
 | T29 | Untrusted-ingestion guardrails | Strip hostile control characters during normalization, flag likely prompt-injection markers on untrusted sources, and surface review flags in metadata and skill docs. | `completed` |
 | T30 | README polish | Add a CI badge, GitHub metadata guidance, safer install guidance, 500-record rationale, security notes, and a roadmap section. | `completed` |
+| T31 | Lean install payload and tag packaging | Restrict `install.sh` to the runtime skill payload only, and on tag pushes build and publish packaged runtime artifacts in GitHub Actions. | `completed` |
 
 ## Open Technical Notes
 
@@ -85,3 +86,4 @@
 - 2026-03-24: Defaulted topic-based generation to 500 records, documented the 500-record default across the skill contract, and expanded the README with stronger natural-language prompt examples.
 - 2026-03-24: Fixed CI-only schema validation failures by projecting records onto the canonical schema before `jsonschema` validation, and added a regression test for strict-validator behavior.
 - 2026-03-24: Added packaging metadata, governance/security docs, install checksum guidance, untrusted-ingestion guardrails, and a stronger public-facing README.
+- 2026-03-24: Switched `install.sh` to an allowlist runtime payload, and added a tag-triggered GitHub Actions packaging job that publishes release assets for the skill bundle.

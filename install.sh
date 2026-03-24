@@ -11,6 +11,12 @@ INSTALL_DEPS=0
 SOURCE_MODE="auto"
 REPO_PATH=""
 TEMP_DIR=""
+REQUIRED_PATHS=(
+    "SKILL.md"
+    "scripts"
+    "sub-skills"
+    "resources"
+)
 
 usage() {
     cat <<'EOF'
@@ -100,59 +106,38 @@ copy_skill() {
         rm -rf "${dest}"
     fi
     mkdir -p "${dest}"
+    for required_path in "${REQUIRED_PATHS[@]}"; do
+        if [[ ! -e "${src}/${required_path}" ]]; then
+            echo "Error: required skill path not found: ${src}/${required_path}" >&2
+            exit 1
+        fi
+    done
 
     if command -v rsync >/dev/null 2>&1; then
-        rsync -a \
-            --exclude ".git/" \
-            --exclude ".github/" \
-            --exclude ".venv/" \
-            --exclude "Plan/" \
-            --exclude "tasks.md" \
-            --exclude "docs/" \
-            --exclude ".gitignore" \
-            --exclude "README*" \
-            --exclude "install.*" \
-            --exclude "__pycache__/" \
-            --exclude "*.pyc" \
-            --exclude "workspace/run_state.sqlite" \
-            --exclude "workspace/*_train.jsonl" \
-            --exclude "workspace/*_test.jsonl" \
-            --exclude "workspace/*_train.csv" \
-            --exclude "workspace/*_test.csv" \
-            --exclude "workspace/DATA_CARD.md" \
-            "${src}/" "${dest}/"
+        for required_path in "${REQUIRED_PATHS[@]}"; do
+            rsync -a \
+                --exclude "__pycache__/" \
+                --exclude "*.pyc" \
+                "${src}/${required_path}" "${dest}/"
+        done
     else
         (
             cd "${src}"
             tar \
-                --exclude=".git" \
-                --exclude=".git/*" \
-                --exclude=".github" \
-                --exclude=".github/*" \
-                --exclude=".venv" \
-                --exclude=".venv/*" \
-                --exclude="Plan" \
-                --exclude="Plan/*" \
-                --exclude="tasks.md" \
-                --exclude="docs" \
-                --exclude="docs/*" \
-                --exclude=".gitignore" \
-                --exclude="README*" \
-                --exclude="install.*" \
                 --exclude="__pycache__" \
+                --exclude="*/__pycache__" \
                 --exclude="*.pyc" \
-                --exclude="workspace/run_state.sqlite" \
-                --exclude="workspace/*_train.jsonl" \
-                --exclude="workspace/*_test.jsonl" \
-                --exclude="workspace/*_train.csv" \
-                --exclude="workspace/*_test.csv" \
-                --exclude="workspace/DATA_CARD.md" \
-                -cf - .
+                -cf - \
+                "${REQUIRED_PATHS[@]}"
         ) | (
             cd "${dest}"
             tar -xf -
         )
     fi
+
+    find "${dest}" -type d -name "__pycache__" -prune -exec rm -rf {} +
+    find "${dest}" -type f -name "*.pyc" -delete
+    mkdir -p "${dest}/workspace"
 
     echo "Installed for ${label}: ${dest}"
 }
