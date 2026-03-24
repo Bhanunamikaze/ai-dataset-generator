@@ -50,6 +50,11 @@ Each canonical record should carry enough metadata for later export and audit:
 - `source_type`
 - optional provenance such as `reference_urls`, tags, source path, or notes
 
+For untrusted imports and web-derived material, also inspect:
+
+- `metadata.security_flags`
+- `metadata.requires_manual_review`
+
 ## Seed-only fallback
 
 If you only need placeholder slots before writing full examples:

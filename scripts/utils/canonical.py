@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .db import CanonicalRecord
+from .security import sanitize_record
 
 INSTRUCTION_KEYS = ("instruction", "prompt", "query", "question", "task")
 CONTEXT_KEYS = ("context", "input", "background", "system", "notes")
@@ -169,6 +170,7 @@ def normalize_record(
         "judge_reason": record.get("judge_reason"),
         "error_message": record.get("error_message"),
     }
+    normalized = sanitize_record(normalized, source_type=normalized["source_type"])
     if not normalized["id"]:
         normalized["id"] = build_record_id(
             {

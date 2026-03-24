@@ -1,5 +1,7 @@
 # Dataset Skill (Antigravity / Claude / Codex)
 
+[![CI](https://github.com/Bhanunamikaze/Agentic-Dataset-Skill/actions/workflows/ci.yml/badge.svg)](https://github.com/Bhanunamikaze/Agentic-Dataset-Skill/actions/workflows/ci.yml)
+
 An agentic dataset-generation skill for agent IDEs, built around tool-native reasoning plus a deterministic local pipeline for normalization, verification, deduplication, export, and data-card generation.
 
 ## IDE Compatibility
@@ -12,10 +14,24 @@ An agentic dataset-generation skill for agent IDEs, built around tool-native rea
 
 - Specialized sub-skills: `9`
 - Pipeline entry scripts: `5`
-- Shared utility modules: `4`
+- Shared utility modules: `5`
 - Internal canonical schema: `1`
 - Preset export schemas: `3`
-- Automated tests: `5`
+- Automated tests: `8`
+
+## GitHub Metadata
+
+Recommended repository description:
+
+```text
+Tool-native dataset generation skill for Codex, Claude Code, and Antigravity with SFT/DPO pipelines, verification, deduplication, and flexible export.
+```
+
+Suggested topics:
+
+```text
+llm, dataset-generation, fine-tuning, agentic, codex, claude-code, antigravity, sft, dpo, jsonl, csv
+```
 
 ## Features
 
@@ -86,6 +102,10 @@ Practical rule:
 - explicit size specified -> honor the requested count
 - explicit prototype/sample wording -> smaller output is acceptable
 
+Why `500`:
+
+- it is a practical default that is large enough to produce a usable first-pass dataset while still being realistic for a single agent-driven session
+
 ## Installation (All IDEs)
 
 ### Quick Install Script
@@ -117,9 +137,29 @@ bash install.sh --target codex --repo-path /path/to/Agentic-Dataset-Skill
 
 ### Install Directly From GitHub
 
+Recommended path:
+
+- clone the repository
+- review `install.sh`
+- run it locally
+
+Convenience remote install exists, but pipe-to-shell is intentionally not the recommended default.
+
+### Safer Remote Install With Checksum
+
+For stronger integrity, pin to a release tag or commit SHA instead of `main`.
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh | \
-  bash -s -- --target codex
+curl -fsSLO https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh
+curl -fsSLO https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh.sha256
+sha256sum -c install.sh.sha256
+bash install.sh --target codex
+```
+
+Python dependency install:
+
+```bash
+python3 -m pip install -r requirements.txt
 ```
 
 ## Example Prompts
@@ -173,17 +213,29 @@ Verify this dataset, remove weak examples, and export custom columns: prompt, an
 - [Architecture Notes](./docs/architecture.md)
 - [Workflow Notes](./docs/workflows.md)
 - [Primary Skill Contract](./SKILL.md)
+- [Contributing Guide](./CONTRIBUTING.md)
+- [Security Policy](./SECURITY.md)
+- [Task Tracker](./tasks.md)
 
-## Current Architectural Gaps
+## Security Notes
 
-- Web collection is still orchestrated through the host IDE tools and imported through canonical drafts, not through a dedicated crawler/collector script.
-- The `data-card` phase is implemented automatically during export rather than through a separate top-level command.
-- There is no separate `dataset card` command; the data card is produced as an export artifact.
+- JSONL and CSV imports should be treated as untrusted input.
+- Normalization strips control characters and flags likely prompt-injection markers on untrusted sources.
+- Review `metadata.security_flags` and `metadata.requires_manual_review` before semantic judging or export.
+- The judge instructions explicitly require treating record content as data, not instructions.
+
+## Roadmap
+
+- Add a dedicated local collector for URL and web-evidence ingestion instead of relying entirely on host-IDE collection.
+- Add a standalone `dataset card` command if users want card generation decoupled from export.
+- Move toward stronger artifact versioning and per-run workspace layout once larger datasets become a primary use case.
+- Migrate backlog items from `tasks.md` into GitHub Issues and milestones.
 
 ## Validation
 
 Run locally:
 
 ```bash
+python3 -m pip install -r requirements.txt
 python3 -m unittest discover -s tests -p 'test*.py'
 ```

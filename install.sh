@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/Bhanunamikaze/Dataset-Skill.git}"
+REPO_URL="${REPO_URL:-https://github.com/Bhanunamikaze/Agentic-Dataset-Skill.git}"
 SKILL_NAME="dataset-generator"
 TARGET="antigravity"
 PROJECT_DIR="$(pwd)"
@@ -45,11 +45,13 @@ Examples:
   bash install.sh --target codex
   bash install.sh --target global
   bash install.sh --target all --project-dir /path/to/project
-  bash install.sh --target codex --repo-path /path/to/Dataset-Skill
+  bash install.sh --target codex --repo-path /path/to/Agentic-Dataset-Skill
 
-Remote install:
-  curl -fsSL https://raw.githubusercontent.com/Bhanunamikaze/Dataset-Skill/main/install.sh | \
-    bash -s -- --target codex
+Safer remote install:
+  curl -fsSLO https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh
+  curl -fsSLO https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh.sha256
+  sha256sum -c install.sh.sha256
+  bash install.sh --target codex
 EOF
 }
 
@@ -109,7 +111,6 @@ copy_skill() {
             --exclude "docs/" \
             --exclude ".gitignore" \
             --exclude "README*" \
-            --exclude "LICENSE*" \
             --exclude "install.*" \
             --exclude "__pycache__/" \
             --exclude "*.pyc" \
@@ -137,7 +138,6 @@ copy_skill() {
                 --exclude="docs/*" \
                 --exclude=".gitignore" \
                 --exclude="README*" \
-                --exclude="LICENSE*" \
                 --exclude="install.*" \
                 --exclude="__pycache__" \
                 --exclude="*.pyc" \
@@ -278,11 +278,13 @@ fi
 if [[ "${INSTALL_DEPS}" -eq 1 ]]; then
     echo ""
     echo "Installing optional Python dependencies..."
-    if python3 -m pip install --user datasketch jsonschema pandas; then
-        echo "Installed datasketch, jsonschema, pandas"
+    if [[ -f "${SRC_DIR}/requirements.txt" ]] && python3 -m pip install --user -r "${SRC_DIR}/requirements.txt"; then
+        echo "Installed dependencies from requirements.txt"
+    elif python3 -m pip install --user jsonschema; then
+        echo "Installed fallback dependency: jsonschema"
     else
         echo "Could not auto-install Python dependencies." >&2
-        echo "Install manually: python3 -m pip install --user datasketch jsonschema pandas" >&2
+        echo "Install manually: python3 -m pip install --user -r ${SRC_DIR}/requirements.txt" >&2
     fi
 fi
 
