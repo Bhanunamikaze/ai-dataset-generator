@@ -39,10 +39,10 @@
 | T09 | Verification pipeline | Implement `scripts/verify.py` with heuristic refusal detection, schema validation, and structured review support for LLM-as-judge steps done inside the IDE. | `completed` |
 | T10 | Deduplication pipeline | Implement `scripts/dedup.py` with exact and near-duplicate detection using MinHash/LSH. | `completed` |
 | T11 | Export pipeline | Implement `scripts/export.py` for OpenAI/Hugging Face style JSONL and CSV exports, dataset splits, and automatic data-card output. | `completed` |
-| T12 | Input ingestion | Support URL/reference-data workflows, existing dataset ingestion workflows, and tool-collected web research workflows that normalize material into the canonical schema. | `pending` |
-| T13 | Sub-skill prompts | Create the markdown prompt files in `sub-skills/` for strategy, seeding, diversity, filtering, judging, deduplication guidance, export formatting, data card generation, and verification-only flows. | `pending` |
-| T14 | Skill orchestrator | Create `SKILL.md` as the orchestration entry point for `dataset generate`, `dataset verify`, and `dataset export`, including resume detection and route selection by user intent across the three IDEs. | `pending` |
-| T15 | Verification and QA | Run local smoke checks, validate the schema and scripts, and document any limits tied to local tool availability rather than provider integrations. | `pending` |
+| T12 | Input ingestion | Support URL/reference-data workflows, existing dataset ingestion workflows, and tool-collected web research workflows that normalize material into the canonical schema. | `completed` |
+| T13 | Sub-skill prompts | Create the markdown prompt files in `sub-skills/` for strategy, seeding, diversity, filtering, judging, deduplication guidance, export formatting, data card generation, and verification-only flows. | `completed` |
+| T14 | Skill orchestrator | Create `SKILL.md` as the orchestration entry point for `dataset generate`, `dataset verify`, and `dataset export`, including resume detection and route selection by user intent across the three IDEs. | `completed` |
+| T15 | Verification and QA | Run local smoke checks, validate the schema and scripts, and document any limits tied to local tool availability rather than provider integrations. | `completed` |
 
 ## Open Technical Notes
 
@@ -60,3 +60,4 @@
 - 2026-03-24: Added shared utilities for file IO, schema validation, canonical normalization, and DB run-state migration; validated imports and normalization behavior.
 - 2026-03-24: Implemented and smoke-tested `generate.py` and `augment.py`, including seed creation, SQLite imports, and DB-backed metadata variant generation.
 - 2026-03-24: Implemented and smoke-tested `verify.py`, `dedup.py`, and `export.py`, including review-file adjudication, duplicate suppression, flexible flat-schema export, and automatic data-card generation.
+- 2026-03-24: Added the full sub-skill layer, root `SKILL.md`, custom export-schema template, and final installer exclusions; validated Codex/Antigravity installs and custom-schema export behavior.

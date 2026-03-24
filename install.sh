@@ -113,6 +113,11 @@ copy_skill() {
             --exclude "__pycache__/" \
             --exclude "*.pyc" \
             --exclude "workspace/run_state.sqlite" \
+            --exclude "workspace/*_train.jsonl" \
+            --exclude "workspace/*_test.jsonl" \
+            --exclude "workspace/*_train.csv" \
+            --exclude "workspace/*_test.csv" \
+            --exclude "workspace/DATA_CARD.md" \
             "${src}/" "${dest}/"
     else
         (
@@ -134,6 +139,11 @@ copy_skill() {
                 --exclude="__pycache__" \
                 --exclude="*.pyc" \
                 --exclude="workspace/run_state.sqlite" \
+                --exclude="workspace/*_train.jsonl" \
+                --exclude="workspace/*_test.jsonl" \
+                --exclude="workspace/*_train.csv" \
+                --exclude="workspace/*_test.csv" \
+                --exclude="workspace/DATA_CARD.md" \
                 -cf - .
         ) | (
             cd "${dest}"
