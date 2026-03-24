@@ -84,9 +84,13 @@ def build_seed_record(
     source_type: str = "generated",
 ) -> CanonicalRecord:
     response = (
-        {"format": "preference_pair", "chosen": "", "rejected": ""}
+        {
+            "format": "preference_pair",
+            "chosen": "[PENDING_CHOSEN_RESPONSE]",
+            "rejected": "[PENDING_REJECTED_RESPONSE]",
+        }
         if task_type == "dpo"
-        else {"format": "single", "text": ""}
+        else {"format": "single", "text": "[PENDING_RESPONSE]"}
     )
     payload = {
         "task_type": task_type,
@@ -106,6 +110,7 @@ def build_seed_record(
             "persona": "general",
             "topic": topic,
             "seed_index": index,
+            "draft_state": "seed",
             "source_type": source_type,
             "tags": [],
         },
@@ -177,35 +182,36 @@ def normalize_record(
 
 
 def row_to_record(row: Mapping[str, Any]) -> dict[str, Any]:
-    metadata = json.loads(row["metadata_json"]) if row.get("metadata_json") else {}
+    payload = dict(row)
+    metadata = json.loads(payload["metadata_json"]) if payload.get("metadata_json") else {}
     response: dict[str, Any]
-    if row.get("response_format") == "preference_pair":
+    if payload.get("response_format") == "preference_pair":
         response = {
             "format": "preference_pair",
-            "chosen": row.get("response_chosen") or "",
-            "rejected": row.get("response_rejected") or "",
+            "chosen": payload.get("response_chosen") or "",
+            "rejected": payload.get("response_rejected") or "",
         }
     else:
         response = {
             "format": "single",
-            "text": row.get("response_text") or "",
+            "text": payload.get("response_text") or "",
         }
 
     return {
-        "id": row["id"],
-        "task_type": row["task_type"],
-        "instruction": row["instruction"],
-        "context": row["context"],
+        "id": payload["id"],
+        "task_type": payload["task_type"],
+        "instruction": payload["instruction"],
+        "context": payload["context"],
         "response": response,
         "metadata": metadata,
-        "pipeline_status": row["pipeline_status"],
-        "run_id": row.get("run_id"),
-        "status": row.get("status"),
-        "source_type": row.get("source_type"),
-        "source_uri": row.get("source_uri"),
-        "judge_score": row.get("judge_score"),
-        "judge_reason": row.get("judge_reason"),
-        "error_message": row.get("error_message"),
+        "pipeline_status": payload["pipeline_status"],
+        "run_id": payload.get("run_id"),
+        "status": payload.get("status"),
+        "source_type": payload.get("source_type"),
+        "source_uri": payload.get("source_uri"),
+        "judge_score": payload.get("judge_score"),
+        "judge_reason": payload.get("judge_reason"),
+        "error_message": payload.get("error_message"),
     }
 
 

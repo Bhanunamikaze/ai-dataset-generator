@@ -34,8 +34,8 @@
 | T04 | Canonical schema | Define `resources/internal-schema/canonical_schema.json` for a unified record model that can represent both SFT and DPO examples. | `completed` |
 | T05 | Workspace bootstrap | Create `workspace/` artifacts and a SQLite initialization layer in `scripts/utils/db.py` for resumable runs and record lifecycle tracking. | `completed` |
 | T06 | Shared runtime utilities | Add reusable utilities for prompt loading, schema helpers, CSV/JSONL parsing, structured record conversion, and local run-state management. | `completed` |
-| T07 | Generation pipeline | Implement `scripts/generate.py` for turning agent-collected or user-provided material into canonical dataset records and tracked run state. | `pending` |
-| T08 | Augmentation pipeline | Implement `scripts/augment.py` for diversity transformations such as tone shifts, persona changes, difficulty changes, and adversarial variations. | `pending` |
+| T07 | Generation pipeline | Implement `scripts/generate.py` for turning agent-collected or user-provided material into canonical dataset records and tracked run state. | `completed` |
+| T08 | Augmentation pipeline | Implement `scripts/augment.py` for diversity transformations such as tone shifts, persona changes, difficulty changes, and adversarial variations. | `completed` |
 | T09 | Verification pipeline | Implement `scripts/verify.py` with heuristic refusal detection, schema validation, and structured review support for LLM-as-judge steps done inside the IDE. | `pending` |
 | T10 | Deduplication pipeline | Implement `scripts/dedup.py` with exact and near-duplicate detection using MinHash/LSH. | `pending` |
 | T11 | Export pipeline | Implement `scripts/export.py` for OpenAI/Hugging Face style JSONL and CSV exports, dataset splits, and automatic data-card output. | `pending` |
@@ -58,3 +58,4 @@
 - 2026-03-24: Re-scoped the build away from direct LLM-provider APIs after reviewing the user's `Agentic-SEO-Skill` repository usage pattern on GitHub.
 - 2026-03-24: Added the multi-target installer, canonical schema, workspace scaffold, and SQLite bootstrap layer; validated installer help, schema parsing, and DB initialization.
 - 2026-03-24: Added shared utilities for file IO, schema validation, canonical normalization, and DB run-state migration; validated imports and normalization behavior.
+- 2026-03-24: Implemented and smoke-tested `generate.py` and `augment.py`, including seed creation, SQLite imports, and DB-backed metadata variant generation.
