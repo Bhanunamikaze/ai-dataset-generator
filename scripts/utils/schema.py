@@ -89,3 +89,52 @@ def basic_validate_record(record: dict[str, Any]) -> list[str]:
         errors.append("context must be a string")
 
     return errors
+
+
+def validate_flat_export_schema(schema: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+
+    if not isinstance(schema, dict):
+        return ["flat export schema must be a JSON object"]
+
+    name = schema.get("name")
+    if not isinstance(name, str) or not name.strip():
+        errors.append("schema.name must be a non-empty string")
+
+    if schema.get("mode") != "flat":
+        errors.append("schema.mode must be 'flat'")
+
+    columns = schema.get("columns")
+    if not isinstance(columns, list) or not columns:
+        errors.append("schema.columns must be a non-empty list")
+        return errors
+
+    seen_names: set[str] = set()
+    for index, column in enumerate(columns):
+        if not isinstance(column, dict):
+            errors.append(f"schema.columns[{index}] must be an object")
+            continue
+
+        column_name = column.get("name")
+        source = column.get("source")
+
+        if not isinstance(column_name, str) or not column_name.strip():
+            errors.append(f"schema.columns[{index}].name must be a non-empty string")
+        elif column_name in seen_names:
+            errors.append(f"schema.columns[{index}].name duplicates '{column_name}'")
+        else:
+            seen_names.add(column_name)
+
+        if not isinstance(source, str) or not source.strip():
+            errors.append(f"schema.columns[{index}].source must be a non-empty string")
+
+    return errors
+
+
+def load_flat_export_schema(path: Path | str) -> dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as handle:
+        schema = json.load(handle)
+    errors = validate_flat_export_schema(schema)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return schema

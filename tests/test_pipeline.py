@@ -161,10 +161,18 @@ class PipelineScriptTests(unittest.TestCase):
             self.assertEqual(export_summary["records_exported"], 1)
             self.assertTrue((output_dir / "dataset_train.csv").exists())
             self.assertTrue((output_dir / "DATA_CARD.md").exists())
+            self.assertEqual(
+                export_summary["schema_name"],
+                "test-export",
+            )
 
             csv_lines = (output_dir / "dataset_train.csv").read_text(encoding="utf-8").splitlines()
             self.assertEqual(csv_lines[0], "prompt,answer,persona")
             self.assertEqual(len(csv_lines), 2)
+            data_card = (output_dir / "DATA_CARD.md").read_text(encoding="utf-8")
+            self.assertIn("## Distributions", data_card)
+            self.assertIn("- prompt", data_card)
+            self.assertIn("- devops: 1", data_card)
 
             connection = sqlite3.connect(db_path)
             try:
@@ -179,6 +187,66 @@ class PipelineScriptTests(unittest.TestCase):
 
             self.assertEqual(statuses["sample_a"], "verified_pass")
             self.assertEqual(statuses["sample_b"], "deduped")
+
+    def test_export_rejects_invalid_flat_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            db_path = temp_dir / "state.sqlite"
+            records_path = temp_dir / "records.jsonl"
+            review_path = temp_dir / "review.jsonl"
+            bad_schema_path = temp_dir / "bad_schema.json"
+
+            records_path.write_text(
+                json.dumps(
+                    {
+                        "id": "sample_a",
+                        "instruction": "Explain chmod",
+                        "context": "",
+                        "response": {"format": "single", "text": "chmod changes permissions."},
+                        "metadata": {"difficulty": "easy", "persona": "teacher"},
+                        "pipeline_status": "pending",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            review_path.write_text(
+                json.dumps({"id": "sample_a", "score": 5, "reason": "Good", "status": "pass"})
+                + "\n",
+                encoding="utf-8",
+            )
+            bad_schema_path.write_text(
+                json.dumps({"name": "broken", "mode": "flat", "columns": [{"name": "", "source": ""}]}),
+                encoding="utf-8",
+            )
+
+            run_script(
+                "scripts/verify.py",
+                "--input",
+                str(records_path),
+                "--review-file",
+                str(review_path),
+                "--db",
+                str(db_path),
+            )
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/export.py",
+                    "--format",
+                    "csv",
+                    "--schema-file",
+                    str(bad_schema_path),
+                    "--db",
+                    str(db_path),
+                ],
+                cwd=str(ROOT_DIR),
+                text=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("schema.columns[0].name", result.stderr + result.stdout)
 
 
 if __name__ == "__main__":

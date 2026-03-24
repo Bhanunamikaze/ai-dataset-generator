@@ -45,6 +45,8 @@
 | T15 | Verification and QA | Run local smoke checks, validate the schema and scripts, and document any limits tied to local tool availability rather than provider integrations. | `completed` |
 | T16 | Automated tests | Add unit and integration-style tests for canonical normalization, DB-backed pipeline flows, and export schema behavior. | `completed` |
 | T17 | CI workflow | Add a GitHub Actions workflow that installs dependencies and runs compile/test checks on pushes and pull requests. | `completed` |
+| T18 | Export schema validation | Validate custom flat export schemas strictly before export runs and fail with actionable errors. | `completed` |
+| T19 | Richer export reporting | Expand export summaries and generated data cards with column lists, distributions, artifact lists, and run metadata. | `completed` |
 
 ## Open Technical Notes
 
@@ -64,3 +66,4 @@
 - 2026-03-24: Implemented and smoke-tested `verify.py`, `dedup.py`, and `export.py`, including review-file adjudication, duplicate suppression, flexible flat-schema export, and automatic data-card generation.
 - 2026-03-24: Added the full sub-skill layer, root `SKILL.md`, custom export-schema template, and final installer exclusions; validated Codex/Antigravity installs and custom-schema export behavior.
 - 2026-03-24: Added unit/integration tests and a GitHub Actions CI workflow; validated local compile checks and `unittest` execution.
+- 2026-03-24: Tightened flat export schema validation and expanded export summaries/data cards with richer dataset statistics; validated with updated tests.

@@ -5,6 +5,7 @@ import json
 import random
 import sys
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ if __package__ in (None, ""):
 from scripts.utils.canonical import row_to_record
 from scripts.utils.db import fetch_records_by_status, get_connection, initialize_database
 from scripts.utils.files import write_csv, write_json, write_jsonl
+from scripts.utils.schema import load_flat_export_schema
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_FLAT_SCHEMA = ROOT_DIR / "resources" / "target-schemas" / "csv_columns.json"
@@ -61,7 +63,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def split_records(records: list[dict[str, Any]], split_ratio: float, seed: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def split_records(
+    records: list[dict[str, Any]],
+    split_ratio: float,
+    seed: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     shuffled = list(records)
     random.Random(seed).shuffle(shuffled)
     test_count = int(len(shuffled) * split_ratio)
@@ -113,31 +119,8 @@ def to_huggingface_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def to_csv_row(record: dict[str, Any]) -> dict[str, Any]:
-    response = record["response"]
-    return {
-        "id": record["id"],
-        "task_type": record["task_type"],
-        "instruction": record["instruction"],
-        "context": record["context"],
-        "response_text": response.get("text", ""),
-        "chosen": response.get("chosen", ""),
-        "rejected": response.get("rejected", ""),
-        "difficulty": record["metadata"].get("difficulty", ""),
-        "persona": record["metadata"].get("persona", ""),
-        "source_type": record.get("source_type", ""),
-        "judge_score": record.get("judge_score", ""),
-        "judge_reason": record.get("judge_reason", ""),
-    }
-
-
-def load_flat_schema(path: str | None) -> dict[str, Any]:
-    schema_path = Path(path) if path else DEFAULT_FLAT_SCHEMA
-    with open(schema_path, "r", encoding="utf-8") as handle:
-        schema = json.load(handle)
-    if schema.get("mode") != "flat":
-        raise ValueError(f"Unsupported flat export schema mode: {schema.get('mode')}")
-    return schema
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def resolve_source(record: dict[str, Any], source: str) -> Any:
@@ -159,25 +142,88 @@ def to_flat_row(record: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any
     }
 
 
-def write_data_card(
-    path: Path,
+def counter_dict(values: list[str]) -> dict[str, int]:
+    return dict(sorted(Counter(values).items()))
+
+
+def summarize_records(
     records: list[dict[str, Any]],
-    split_ratio: float,
+    *,
+    train_count: int,
+    test_count: int,
     export_format: str,
     schema_file: str | None,
+    flat_schema: dict[str, Any],
+    output_files: list[str],
+) -> dict[str, Any]:
+    judge_values = [record["judge_score"] for record in records if record.get("judge_score") is not None]
+    summary = {
+        "generated_at": utc_now(),
+        "records_exported": len(records),
+        "train_count": train_count,
+        "test_count": test_count,
+        "format": export_format,
+        "schema_file": schema_file or str(DEFAULT_FLAT_SCHEMA),
+        "schema_name": flat_schema["name"],
+        "flat_columns": [column["name"] for column in flat_schema["columns"]],
+        "task_type_distribution": counter_dict([record["task_type"] for record in records]),
+        "source_type_distribution": counter_dict(
+            [str(record.get("source_type", "unknown")) for record in records]
+        ),
+        "difficulty_distribution": counter_dict(
+            [str(record["metadata"].get("difficulty", "unknown")) for record in records]
+        ),
+        "persona_distribution": counter_dict(
+            [str(record["metadata"].get("persona", "unknown")) for record in records]
+        ),
+        "judge_score_distribution": dict(sorted(Counter(judge_values).items())),
+        "files": output_files,
+    }
+    return summary
+
+
+def write_data_card(
+    path: Path,
+    summary: dict[str, Any],
 ) -> Path:
-    task_counts = Counter(record["task_type"] for record in records)
-    source_counts = Counter(record.get("source_type", "unknown") for record in records)
+    def dict_lines(payload: dict[str, Any]) -> list[str]:
+        if not payload:
+            return ["- none"]
+        return [f"- {key}: {value}" for key, value in payload.items()]
+
     lines = [
         "# Dataset Card",
         "",
         "## Summary",
-        f"- Total records: {len(records)}",
-        f"- Split ratio (test): {split_ratio}",
-        f"- Export format: {export_format}",
-        f"- Flat schema file: {schema_file or str(DEFAULT_FLAT_SCHEMA)}",
-        f"- Task type distribution: {dict(task_counts)}",
-        f"- Source type distribution: {dict(source_counts)}",
+        f"- Generated at: {summary['generated_at']}",
+        f"- Total exported records: {summary['records_exported']}",
+        f"- Train count: {summary['train_count']}",
+        f"- Test count: {summary['test_count']}",
+        f"- Export format: {summary['format']}",
+        f"- Flat schema file: {summary['schema_file']}",
+        f"- Flat schema name: {summary['schema_name']}",
+        "",
+        "## Flat Columns",
+        *[f"- {column}" for column in summary["flat_columns"]],
+        "",
+        "## Distributions",
+        "### Task Types",
+        *dict_lines(summary["task_type_distribution"]),
+        "",
+        "### Source Types",
+        *dict_lines(summary["source_type_distribution"]),
+        "",
+        "### Difficulty",
+        *dict_lines(summary["difficulty_distribution"]),
+        "",
+        "### Persona",
+        *dict_lines(summary["persona_distribution"]),
+        "",
+        "### Judge Scores",
+        *dict_lines(summary["judge_score_distribution"]),
+        "",
+        "## Artifacts",
+        *[f"- {file_path}" for file_path in summary["files"]],
         "",
         "## Generation Method",
         "- Tool-native reasoning in Codex, Antigravity, or Claude Code.",
@@ -251,6 +297,9 @@ def export_flat_jsonl_pair(
 
 def main() -> None:
     args = parse_args()
+    if not 0 <= args.split <= 1:
+        raise SystemExit("--split must be between 0 and 1 inclusive")
+
     db_path = initialize_database(args.db) if args.db else initialize_database()
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -267,7 +316,8 @@ def main() -> None:
 
     train_records, test_records = split_records(records, args.split, args.seed)
     written_files: list[str] = []
-    flat_schema = load_flat_schema(args.schema_file)
+    flat_schema_path = Path(args.schema_file) if args.schema_file else DEFAULT_FLAT_SCHEMA
+    flat_schema = load_flat_export_schema(flat_schema_path)
     flat_train = [to_flat_row(record, flat_schema) for record in train_records]
     flat_test = [to_flat_row(record, flat_schema) for record in test_records]
     flat_fieldnames = [column["name"] for column in flat_schema["columns"]]
@@ -313,21 +363,18 @@ def main() -> None:
             )
         )
 
-    data_card_path = write_data_card(
-        output_dir / "DATA_CARD.md",
+    summary = summarize_records(
         records,
-        args.split,
-        args.format,
-        args.schema_file,
+        train_count=len(train_records),
+        test_count=len(test_records),
+        export_format=args.format,
+        schema_file=str(flat_schema_path),
+        flat_schema=flat_schema,
+        output_files=written_files,
     )
-    summary = {
-        "db_path": str(db_path),
-        "records_exported": len(records),
-        "train_count": len(train_records),
-        "test_count": len(test_records),
-        "format": args.format,
-        "files": written_files + [str(data_card_path)],
-    }
+    data_card_path = write_data_card(output_dir / "DATA_CARD.md", summary)
+    summary["files"] = written_files + [str(data_card_path)]
+    summary["db_path"] = str(db_path)
     if args.report:
         write_json(args.report, summary)
 
