@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -110,6 +110,7 @@ def initialize_database(db_path: Path | str = DEFAULT_DB_PATH) -> Path:
     connection = get_connection(db_path)
     try:
         connection.executescript(SCHEMA_SQL)
+        migrate_database(connection)
         connection.commit()
     finally:
         connection.close()
@@ -121,7 +122,7 @@ def serialize_metadata(metadata: Mapping[str, Any] | None) -> str:
 
 
 def flatten_record(record: CanonicalRecord | Mapping[str, Any]) -> dict[str, Any]:
-    payload = record if isinstance(record, Mapping) else record.__dict__
+    payload = record if isinstance(record, Mapping) else asdict(record)
     response = dict(payload.get("response") or {})
     row = {
         "id": payload["id"],
@@ -144,6 +145,17 @@ def flatten_record(record: CanonicalRecord | Mapping[str, Any]) -> dict[str, Any
         "error_message": payload.get("error_message"),
     }
     return row
+
+
+def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
+    rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {row["name"] for row in rows}
+
+
+def migrate_database(connection: sqlite3.Connection) -> None:
+    run_columns = _table_columns(connection, "runs")
+    if "tool_context" not in run_columns:
+        connection.execute("ALTER TABLE runs ADD COLUMN tool_context TEXT")
 
 
 def upsert_record(
@@ -222,6 +234,63 @@ def upsert_record(
             "created_at": timestamp,
             "updated_at": timestamp,
         },
+    )
+
+
+def upsert_run(
+    connection: sqlite3.Connection,
+    *,
+    run_id: str,
+    user_query: str,
+    mode: str,
+    source_type: str,
+    tool_context: str | None = None,
+    status: str = "initialized",
+) -> None:
+    timestamp = utc_now()
+    connection.execute(
+        """
+        INSERT INTO runs (
+            run_id,
+            user_query,
+            mode,
+            source_type,
+            tool_context,
+            status,
+            created_at,
+            updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(run_id) DO UPDATE SET
+            user_query = excluded.user_query,
+            mode = excluded.mode,
+            source_type = excluded.source_type,
+            tool_context = excluded.tool_context,
+            status = excluded.status,
+            updated_at = excluded.updated_at
+        """,
+        (
+            run_id,
+            user_query,
+            mode,
+            source_type,
+            tool_context,
+            status,
+            timestamp,
+            timestamp,
+        ),
+    )
+
+
+def list_runs(
+    connection: sqlite3.Connection,
+    *,
+    limit: int = 10,
+) -> list[sqlite3.Row]:
+    return list(
+        connection.execute(
+            "SELECT * FROM runs ORDER BY updated_at DESC LIMIT ?",
+            (limit,),
+        )
     )
 
 
