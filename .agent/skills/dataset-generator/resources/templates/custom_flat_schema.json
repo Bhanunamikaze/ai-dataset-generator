@@ -1,0 +1,22 @@
+{
+  "name": "custom-export-schema",
+  "mode": "flat",
+  "columns": [
+    {
+      "name": "prompt",
+      "source": "instruction"
+    },
+    {
+      "name": "answer",
+      "source": "response.text"
+    },
+    {
+      "name": "difficulty",
+      "source": "metadata.difficulty"
+    },
+    {
+      "name": "persona",
+      "source": "metadata.persona"
+    }
+  ]
+}

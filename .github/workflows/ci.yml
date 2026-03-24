@@ -30,8 +30,8 @@ jobs:
 
       - name: Compile scripts
         run: |
-          python -m py_compile scripts/generate.py scripts/augment.py scripts/verify.py scripts/dedup.py scripts/export.py
-          python -m py_compile scripts/utils/db.py scripts/utils/files.py scripts/utils/schema.py scripts/utils/canonical.py scripts/utils/security.py
+          python -m py_compile scripts/generate.py scripts/augment.py scripts/verify.py scripts/dedup.py scripts/export.py scripts/collect.py
+          python -m py_compile scripts/utils/db.py scripts/utils/files.py scripts/utils/schema.py scripts/utils/canonical.py scripts/utils/security.py scripts/utils/web.py
 
       - name: Run tests
         run: python -m unittest discover -s tests -p "test*.py"

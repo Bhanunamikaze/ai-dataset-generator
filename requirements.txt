@@ -1,1 +1,8 @@
 jsonschema>=4.26,<5
+
+# Optional: required only for scripts/collect.py (local web/URL/file collector)
+# Install with: python3 -m pip install -r requirements.txt
+requests>=2.31,<3
+beautifulsoup4>=4.12,<5
+trafilatura>=1.12,<2
+duckduckgo-search>=6.1,<8

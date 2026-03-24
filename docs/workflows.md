@@ -1,5 +1,28 @@
 # Workflow Notes
 
+## Collect Flow
+
+Use this when the user wants source material fetched before drafting training records.
+
+1. **First**: try the IDE's native search/browsing tools to collect material.
+2. **Fallback**: run `scripts/collect.py` for large collections or when IDE tools are unavailable:
+   ```bash
+   # Web search
+   python3 scripts/collect.py --query "<topic>" --max-results 10 --tool-context codex
+   # Explicit URLs
+   python3 scripts/collect.py --urls <url1> [url2 ...] --tool-context codex
+   # Local files / repos
+   python3 scripts/collect.py --paths ./docs ./README.md --tool-context codex
+   ```
+3. The collector writes `workspace/collected_<timestamp>.jsonl` (records with `status: collected`).
+4. Read the collected JSONL and draft canonical instruction/response records.
+5. Import the drafts into the pipeline:
+   ```bash
+   python3 scripts/generate.py --input workspace/drafts.jsonl \
+       --source-type url_reference --tool-context codex
+   ```
+6. Continue with the standard verify → dedup → export pipeline.
+
 ## Generate Flow
 
 Use this when the user wants a new dataset or wants raw material turned into one.

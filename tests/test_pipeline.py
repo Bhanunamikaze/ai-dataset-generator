@@ -595,5 +595,487 @@ class PipelineScriptTests(unittest.TestCase):
         )
 
 
+class AdditionalCoverageTests(unittest.TestCase):
+    # ------------------------------------------------------------------
+    # augment.py — metadata-variant mode
+    # ------------------------------------------------------------------
+
+    def test_augment_metadata_variant_mode_creates_variants(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            db_path = temp_dir / "state.sqlite"
+            input_path = temp_dir / "drafts.jsonl"
+
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "id": "base_record",
+                        "instruction": "Explain how to write a bash script safely.",
+                        "context": "",
+                        "response": {
+                            "format": "single",
+                            "text": "Use set -euo pipefail and quote variables.",
+                        },
+                        "metadata": {"difficulty": "medium", "persona": "general"},
+                        "pipeline_status": "pending",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            run_script(
+                "scripts/generate.py",
+                "--input", str(input_path),
+                "--db", str(db_path),
+                "--tool-context", "codex",
+            )
+
+            result = run_script(
+                "scripts/augment.py",
+                "--from-status", "raw_generated",
+                "--persona", "expert",
+                "--persona", "skeptical-reviewer",
+                "--difficulty", "hard",
+                "--limit", "10",
+                "--db", str(db_path),
+                "--tool-context", "codex",
+            )
+            summary = json.loads(result.stdout)
+
+            # base (medium/general) + expert/hard + skeptical-reviewer/hard = 2 new variants
+            self.assertGreaterEqual(summary["augmented"], 2)
+
+            connection = sqlite3.connect(db_path)
+            try:
+                rows = connection.execute(
+                    "SELECT metadata_json FROM records WHERE status = 'augmented'"
+                ).fetchall()
+            finally:
+                connection.close()
+
+            personas_found = {json.loads(row[0])["persona"] for row in rows}
+            self.assertIn("expert", personas_found)
+            self.assertIn("skeptical-reviewer", personas_found)
+
+    # ------------------------------------------------------------------
+    # Empty-DB edge cases — verify, dedup, export should not crash
+    # ------------------------------------------------------------------
+
+    def test_verify_on_empty_database_succeeds_gracefully(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            db_path = Path(temp_dir_name) / "state.sqlite"
+            result = run_script(
+                "scripts/verify.py",
+                "--from-status", "raw_generated",
+                "--db", str(db_path),
+            )
+            summary = json.loads(result.stdout)
+            self.assertEqual(summary["records_processed"], 0)
+            self.assertEqual(summary["verified_pass"], 0)
+            self.assertEqual(summary["verified_fail"], 0)
+
+    def test_dedup_on_empty_database_succeeds_gracefully(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            db_path = Path(temp_dir_name) / "state.sqlite"
+            result = run_script(
+                "scripts/dedup.py",
+                "--from-status", "verified_pass",
+                "--db", str(db_path),
+            )
+            summary = json.loads(result.stdout)
+            self.assertEqual(summary["records_examined"], 0)
+            self.assertEqual(summary["kept_count"], 0)
+            self.assertEqual(summary["duplicate_count"], 0)
+
+    def test_export_on_empty_database_succeeds_gracefully(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            db_path = temp_dir / "state.sqlite"
+            output_dir = temp_dir / "exports"
+            result = run_script(
+                "scripts/export.py",
+                "--format", "openai",
+                "--split", "0.0",
+                "--output-dir", str(output_dir),
+                "--db", str(db_path),
+            )
+            summary = json.loads(result.stdout)
+            self.assertEqual(summary["records_exported"], 0)
+
+    # ------------------------------------------------------------------
+    # export.py — --format all
+    # ------------------------------------------------------------------
+
+    def test_export_format_all_writes_all_four_formats(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            db_path = temp_dir / "state.sqlite"
+            input_path = temp_dir / "records.jsonl"
+            review_path = temp_dir / "review.jsonl"
+            output_dir = temp_dir / "exports"
+
+            input_path.write_text(
+                json.dumps(
+                    {
+                        "id": "fmt_all_a",
+                        "instruction": "What is the difference between chmod and chown?",
+                        "context": "Linux file permissions topic.",
+                        "response": {
+                            "format": "single",
+                            "text": "chmod changes file mode bits; chown changes ownership.",
+                        },
+                        "metadata": {"difficulty": "easy", "persona": "teacher"},
+                        "pipeline_status": "pending",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            review_path.write_text(
+                json.dumps({"id": "fmt_all_a", "score": 5, "reason": "Clear.", "status": "pass"})
+                + "\n",
+                encoding="utf-8",
+            )
+
+            run_script(
+                "scripts/verify.py",
+                "--input", str(input_path),
+                "--review-file", str(review_path),
+                "--db", str(db_path),
+            )
+
+            export_result = run_script(
+                "scripts/export.py",
+                "--format", "all",
+                "--split", "0.0",
+                "--output-dir", str(output_dir),
+                "--db", str(db_path),
+            )
+            summary = json.loads(export_result.stdout)
+
+            self.assertEqual(summary["records_exported"], 1)
+            self.assertTrue((output_dir / "openai_train.jsonl").exists())
+            self.assertTrue((output_dir / "huggingface_train.jsonl").exists())
+            self.assertTrue((output_dir / "dataset_train.csv").exists())
+            self.assertTrue((output_dir / "flat_train.jsonl").exists())
+            self.assertTrue((output_dir / "DATA_CARD.md").exists())
+
+    # ------------------------------------------------------------------
+    # files.py — CSV and JSON array input loading
+    # ------------------------------------------------------------------
+
+    def test_load_csv_input_normalizes_into_canonical_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            db_path = temp_dir / "state.sqlite"
+            csv_path = temp_dir / "input.csv"
+
+            csv_path.write_text(
+                "instruction,response,difficulty,persona\n"
+                "Explain grep basics,Use grep -r for recursive search.,easy,teacher\n",
+                encoding="utf-8",
+            )
+
+            result = run_script(
+                "scripts/generate.py",
+                "--input", str(csv_path),
+                "--source-type", "raw_dataset",
+                "--db", str(db_path),
+                "--tool-context", "codex",
+            )
+            summary = json.loads(result.stdout)
+            self.assertEqual(summary["imported"], 1)
+
+    def test_load_json_array_input_normalizes_into_canonical_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            db_path = temp_dir / "state.sqlite"
+            json_path = temp_dir / "input.json"
+
+            json_path.write_text(
+                json.dumps([
+                    {
+                        "instruction": "Explain sed basics.",
+                        "response": {"format": "single", "text": "sed edits streams of text."},
+                        "metadata": {"difficulty": "easy", "persona": "teacher"},
+                        "pipeline_status": "pending",
+                    }
+                ]),
+                encoding="utf-8",
+            )
+
+            result = run_script(
+                "scripts/generate.py",
+                "--input", str(json_path),
+                "--source-type", "generated",
+                "--db", str(db_path),
+                "--tool-context", "codex",
+            )
+            summary = json.loads(result.stdout)
+            self.assertEqual(summary["imported"], 1)
+
+    # ------------------------------------------------------------------
+    # security.py — narrowed injection pattern regression
+    # ------------------------------------------------------------------
+
+    def test_narrowed_injection_pattern_does_not_auto_allow_for_generic_security_topics(self) -> None:
+        from scripts.utils.security import should_allow_injections_by_default
+
+        # Generic "security" or "cybersecurity" keywords should NOT trigger auto-allow
+        self.assertFalse(
+            should_allow_injections_by_default(
+                "Generate a dataset about API security best practices."
+            )
+        )
+        self.assertFalse(
+            should_allow_injections_by_default(
+                "Build a cybersecurity FAQ for enterprise customers."
+            )
+        )
+
+        # Explicitly adversarial terms still trigger auto-allow
+        self.assertTrue(
+            should_allow_injections_by_default(
+                "Generate a red-team training dataset with jailbreak examples."
+            )
+        )
+        self.assertTrue(
+            should_allow_injections_by_default(
+                "Build a pentest prompt-injection corpus."
+            )
+        )
+
+    # ------------------------------------------------------------------
+    # export.py — HuggingFace does not emit empty system messages
+    # ------------------------------------------------------------------
+
+    def test_huggingface_export_omits_system_message_when_context_is_empty(self) -> None:
+        from scripts.export import to_huggingface_record
+
+        record = {
+            "instruction": "What does chmod 755 do?",
+            "context": "",
+            "response": {"format": "single", "text": "Sets rwxr-xr-x permissions."},
+            "metadata": {"difficulty": "easy", "persona": "teacher"},
+        }
+        result = to_huggingface_record(record)
+        roles = [msg["role"] for msg in result["messages"]]
+        self.assertNotIn("system", roles)
+        self.assertEqual(roles, ["user", "assistant"])
+
+    def test_huggingface_export_includes_system_message_when_context_is_present(self) -> None:
+        from scripts.export import to_huggingface_record
+
+        record = {
+            "instruction": "What does chmod 755 do?",
+            "context": "You are a Linux tutor.",
+            "response": {"format": "single", "text": "Sets rwxr-xr-x permissions."},
+            "metadata": {"difficulty": "easy", "persona": "teacher"},
+        }
+        result = to_huggingface_record(record)
+        roles = [msg["role"] for msg in result["messages"]]
+        self.assertEqual(roles, ["system", "user", "assistant"])
+        self.assertEqual(result["messages"][0]["content"], "You are a Linux tutor.")
+
+
+
+class CollectorTests(unittest.TestCase):
+    # ------------------------------------------------------------------
+    # web.py — unit tests (no network required)
+    # ------------------------------------------------------------------
+
+    def test_chunk_text_returns_single_chunk_for_short_input(self) -> None:
+        from scripts.utils.web import chunk_text
+
+        text = "This is a short document."
+        chunks = chunk_text(text, max_chars=500, overlap=50)
+        self.assertEqual(len(chunks), 1)
+        self.assertEqual(chunks[0], text)
+
+    def test_chunk_text_splits_long_input(self) -> None:
+        from scripts.utils.web import chunk_text
+
+        # 10 paragraphs each ~120 chars
+        para = "A" * 120
+        text = "\n\n".join([para] * 10)
+        chunks = chunk_text(text, max_chars=300, overlap=0)
+        self.assertGreater(len(chunks), 1)
+        for chunk in chunks:
+            self.assertLessEqual(len(chunk), 400)  # some tolerance for overlap
+
+    def test_chunk_text_returns_empty_for_blank_input(self) -> None:
+        from scripts.utils.web import chunk_text
+
+        self.assertEqual(chunk_text("   ", max_chars=500), [])
+        self.assertEqual(chunk_text("", max_chars=500), [])
+
+    def test_read_local_file_returns_content(self) -> None:
+        from scripts.utils.web import read_local_file
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write("Hello, collector!")
+            file_path = f.name
+
+        try:
+            content = read_local_file(file_path)
+            self.assertEqual(content, "Hello, collector!")
+        finally:
+            Path(file_path).unlink(missing_ok=True)
+
+    def test_walk_repo_filters_by_extension(self) -> None:
+        from scripts.utils.web import walk_repo
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            p = Path(tmpdir)
+            (p / "file.md").write_text("# Title\nContent.", encoding="utf-8")
+            (p / "file.py").write_text("print('hello')", encoding="utf-8")
+            (p / "file.bin").write_bytes(b"\x00\x01\x02")
+
+            md_only = walk_repo(p, extensions={".md"}, max_files=50)
+            py_and_md = walk_repo(p, extensions={".md", ".py"}, max_files=50)
+
+        self.assertEqual(len(md_only), 1)
+        self.assertTrue(md_only[0].path.endswith(".md"))
+
+        extensions_found = {lf.extension for lf in py_and_md}
+        self.assertIn(".md", extensions_found)
+        self.assertIn(".py", extensions_found)
+        self.assertNotIn(".bin", extensions_found)
+
+    def test_extract_text_strips_html_tags_with_stdlib_fallback(self) -> None:
+        from scripts.utils.web import extract_text
+
+        sample_html = (
+            "<html><head><title>Test Page</title></head>"
+            "<body><p>Hello world</p><script>ignored()</script></body></html>"
+        )
+        result = extract_text(sample_html, url="http://example.com/")
+        self.assertIn("Hello world", result.text)
+        self.assertIn("Test Page", result.title)
+        self.assertNotIn("ignored()", result.text)
+
+    # ------------------------------------------------------------------
+    # collect.py — integration tests (no network required)
+    # ------------------------------------------------------------------
+
+    def test_collect_from_local_files_produces_valid_canonical_jsonl(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_dir = Path(tmpdir)
+            output_path = temp_dir / "collected.jsonl"
+
+            # Write sample local files
+            (temp_dir / "guide.md").write_text(
+                "# Linux Permissions\n\nThe `chmod` command changes file permissions.\n\n"
+                "Use `chmod 755` to set rwxr-xr-x on a file.",
+                encoding="utf-8",
+            )
+            (temp_dir / "notes.txt").write_text(
+                "File ownership is changed with chown. "
+                "For example, `chown user:group file` sets the owner and group.",
+                encoding="utf-8",
+            )
+
+            result = run_script(
+                "scripts/collect.py",
+                "--paths", str(temp_dir / "guide.md"), str(temp_dir / "notes.txt"),
+                "--output", str(output_path),
+                "--tool-context", "codex",
+            )
+            summary = json.loads(result.stdout)
+
+            self.assertGreater(summary["records_collected"], 0)
+            self.assertEqual(summary["output"], str(output_path))
+            self.assertTrue(output_path.exists())
+
+            # Validate each record is a parseable dict with required keys
+            records = [json.loads(line) for line in output_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            self.assertGreater(len(records), 0)
+            for rec in records:
+                self.assertIn("id", rec)
+                self.assertIn("instruction", rec)
+                self.assertIn("response", rec)
+                self.assertIn("metadata", rec)
+                self.assertEqual(rec["status"], "collected")
+                self.assertIn(rec["source_type"], ("url_reference", "internet_research"))
+
+    def test_collect_from_local_files_output_imports_into_pipeline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_dir = Path(tmpdir)
+            collected_path = temp_dir / "collected.jsonl"
+            db_path = temp_dir / "state.sqlite"
+
+            (temp_dir / "doc.md").write_text(
+                "# Bash Scripting\n\nUse `set -euo pipefail` at the top of every script.\n\n"
+                "Quote all variable expansions to prevent word splitting.",
+                encoding="utf-8",
+            )
+
+            # Step 1: collect
+            run_script(
+                "scripts/collect.py",
+                "--paths", str(temp_dir / "doc.md"),
+                "--output", str(collected_path),
+                "--tool-context", "codex",
+            )
+
+            # Step 2: import collected JSONL into the pipeline db
+            gen_result = run_script(
+                "scripts/generate.py",
+                "--input", str(collected_path),
+                "--source-type", "url_reference",
+                "--db", str(db_path),
+                "--tool-context", "codex",
+            )
+            gen_summary = json.loads(gen_result.stdout)
+
+            self.assertGreater(gen_summary["imported"], 0)
+
+            # Verify records exist in the DB
+            import sqlite3 as _sqlite3
+            conn = _sqlite3.connect(db_path)
+            try:
+                count = conn.execute("SELECT COUNT(*) FROM records").fetchone()[0]
+            finally:
+                conn.close()
+            self.assertGreater(count, 0)
+
+    def test_collect_fails_gracefully_with_no_source(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "scripts/collect.py"],
+            cwd=str(ROOT_DIR),
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_collect_from_directory_walk_respects_extension_filter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_dir = Path(tmpdir)
+            output_path = temp_dir / "collected.jsonl"
+
+            (temp_dir / "a.md").write_text("# A\nMarkdown content here.", encoding="utf-8")
+            (temp_dir / "b.py").write_text("def foo():\n    pass\n", encoding="utf-8")
+            (temp_dir / "c.csv").write_text("col1,col2\nval1,val2\n", encoding="utf-8")
+
+            run_script(
+                "scripts/collect.py",
+                "--paths", str(temp_dir),
+                "--extensions", "md",
+                "--output", str(output_path),
+                "--tool-context", "codex",
+            )
+
+            records = [
+                json.loads(line)
+                for line in output_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            source_paths = [r.get("source_uri", r.get("metadata", {}).get("source_path", "")) for r in records]
+            for path in source_paths:
+                self.assertFalse(path.endswith(".py"), f"Should not collect .py files: {path}")
+                self.assertFalse(path.endswith(".csv"), f"Should not collect .csv files: {path}")
+
+
 if __name__ == "__main__":
     unittest.main()

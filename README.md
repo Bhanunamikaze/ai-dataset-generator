@@ -12,18 +12,19 @@ An agentic dataset-generation skill for agent IDEs, built around tool-native rea
 
 ## Current Inventory
 
-- Specialized sub-skills: `9`
-- Pipeline entry scripts: `5`
-- Shared utility modules: `5`
+- Specialized sub-skills: `10`
+- Pipeline entry scripts: `6`
+- Shared utility modules: `6`
 - Internal canonical schema: `1`
 - Preset export schemas: `3`
-- Automated tests: `14`
+- Automated tests: `24`
 
 
 ## Features
 
 | Capability | Description |
 |-----------|-------------|
+| `dataset collect` | Fetch content from web searches (5-backend fallback chain), explicit URLs, or local files/repos and emit canonical JSONL for agent-driven dataset creation |
 | `dataset generate` | Topic-driven generation, URL/reference structuring, web-research capture, or raw dataset normalization into canonical records |
 | `dataset verify` | Heuristic checks, refusal detection, review-file adjudication, and audit-friendly DB-backed verification |
 | `dataset export` | OpenAI, HuggingFace, CSV, and flat JSONL export with automatic data-card generation |
@@ -34,6 +35,7 @@ An agentic dataset-generation skill for agent IDEs, built around tool-native rea
 | `llm-judge` | Structured review-file contract for semantic pass/fail judgments inside the IDE |
 | `deduplicator` | Exact and near-duplicate suppression before export |
 | `formatter-exporter` | Preset and custom flat-schema mapping for final user-facing outputs |
+| `local-collector` | Sub-skill that routes collection through IDE-native tools first, then falls back to `scripts/collect.py` |
 
 
 ## Installation (All IDEs)
@@ -229,7 +231,7 @@ Why `500`:
 
 ## Roadmap
 
-- Add a dedicated local collector for URL and web-evidence ingestion instead of relying entirely on host-IDE collection.
 - Add a standalone `dataset card` command if users want card generation decoupled from export.
 - Move toward stronger artifact versioning and per-run workspace layout once larger datasets become a primary use case.
-- Migrate backlog items from `docs/tasks.md` into GitHub Issues and milestones.
+- Add multi-turn conversation record support (beyond single instruction/response pairs).
+- Add Parquet export for HuggingFace-native workflows.

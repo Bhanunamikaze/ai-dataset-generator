@@ -56,6 +56,7 @@ Responsibilities:
 - [`scripts/verify.py`](../scripts/verify.py)
 - [`scripts/dedup.py`](../scripts/dedup.py)
 - [`scripts/export.py`](../scripts/export.py)
+- [`scripts/collect.py`](../scripts/collect.py)
 
 Responsibilities:
 
@@ -64,6 +65,7 @@ Responsibilities:
 - apply deterministic heuristics
 - apply duplicate suppression
 - export into fixed presets or custom flat schemas
+- collect and chunk content from web searches, URLs, and local files (`collect.py`)
 
 ## 4. Resources and Workspace
 
