@@ -5,13 +5,16 @@
 Use this when the user wants a new dataset or wants raw material turned into one.
 
 1. decide request type, `task_type`, `source_type`, and target schema
-2. inspect recent runs in SQLite
-3. collect or write canonical draft records
-4. import drafts with `scripts/generate.py`
-5. augment if needed
-6. verify
-7. deduplicate
-8. export
+2. set the target example count
+3. if the user does not specify a size, default to `500`
+4. generate or collect records in batches until the target count is reached
+5. inspect recent runs in SQLite
+6. collect or write canonical draft records
+7. import drafts with `scripts/generate.py`
+8. augment if needed
+9. verify
+10. deduplicate
+11. export
 
 ## Verify Flow
 

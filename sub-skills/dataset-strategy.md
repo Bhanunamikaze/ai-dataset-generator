@@ -24,6 +24,9 @@ Turn the user request into a concrete dataset plan before any records are writte
    - HuggingFace preset
    - Flat CSV/JSONL
    - Custom schema file
+5. Define the target example count:
+   - use the user-provided size when present
+   - default to `500` examples when the user does not specify a size
 
 ## Important rule
 
@@ -47,6 +50,8 @@ Produce a concise plan with:
 - taxonomy buckets
 - quality requirements
 - resume or fresh-run decision
+
+Always state the intended example count explicitly. Do not leave it implicit.
 
 ## Source-type mapping
 

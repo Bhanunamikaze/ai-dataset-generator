@@ -13,18 +13,23 @@ Create or normalize draft records into the fixed canonical schema.
 - Draft canonical records directly in JSONL.
 - Spread examples across taxonomy, persona, and difficulty.
 - Keep records concrete and non-redundant.
+- Unless the user specifies otherwise, target `500` total records.
+- For large targets, generate in batches and keep going until the planned count is reached.
+- Do not stop after a small starter set unless the user explicitly asked for a prototype or sample.
 
 ### URL or reference-material structuring
 
 - Use available browsing, file-reading, and search tools in the IDE.
 - Extract facts, examples, or source passages.
 - Convert them into canonical records instead of copying raw source dumps.
+- If the user does not specify size, aim for `500` structured records by default.
 
 ### Existing dataset normalization
 
 - Map source columns into canonical fields.
 - Preserve provenance in metadata.
 - Keep the source URI/path when available.
+- Preserve as much of the usable dataset size as possible unless the user asks for sampling.
 
 ## Output path
 
@@ -50,5 +55,7 @@ Each canonical record should carry enough metadata for later export and audit:
 If you only need placeholder slots before writing full examples:
 
 ```bash
-python3 scripts/generate.py --topic "<topic>" --count <n> --task-type <sft|dpo>
+python3 scripts/generate.py --topic "<topic>" [--count <n>] --task-type <sft|dpo>
 ```
+
+If `--count` is omitted, the placeholder target defaults to `500`.

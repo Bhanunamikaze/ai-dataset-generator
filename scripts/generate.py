@@ -31,8 +31,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--count",
         type=int,
-        default=0,
-        help="Number of placeholder seed rows to create when --topic is used.",
+        default=500,
+        help="Number of placeholder seed rows to create when --topic is used. Default: 500.",
     )
     parser.add_argument(
         "--task-type",
@@ -108,7 +108,7 @@ def load_or_seed_records(args: argparse.Namespace) -> list[dict[str, Any]]:
             for index in range(1, args.count + 1)
         ]
 
-    raise SystemExit("Provide --input or use --topic with --count to create seed rows.")
+    raise SystemExit("Provide --input or use --topic with a positive --count to create seed rows.")
 
 
 def main() -> None:

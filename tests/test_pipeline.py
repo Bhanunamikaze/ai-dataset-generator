@@ -63,6 +63,32 @@ class CanonicalNormalizationTests(unittest.TestCase):
 
 
 class PipelineScriptTests(unittest.TestCase):
+    def test_generate_topic_defaults_to_500_seed_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            db_path = temp_dir / "state.sqlite"
+
+            result = run_script(
+                "scripts/generate.py",
+                "--topic",
+                "medical triage",
+                "--db",
+                str(db_path),
+                "--tool-context",
+                "codex",
+            )
+            summary = json.loads(result.stdout)
+            self.assertEqual(summary["imported"], 500)
+
+            connection = sqlite3.connect(db_path)
+            try:
+                row = connection.execute("SELECT COUNT(*) FROM records").fetchone()
+            finally:
+                connection.close()
+
+            self.assertIsNotNone(row)
+            self.assertEqual(row[0], 500)
+
     def test_generate_import_promotes_pending_input_to_raw_generated(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_name:
             temp_dir = Path(temp_dir_name)

@@ -76,6 +76,16 @@ The fixed/flexible split is intentional:
 - internal canonical schema: fixed
 - final user-facing export schema: flexible
 
+## Default Dataset Size
+
+For generation requests, the default target size is `500` records unless the user explicitly asks for a different number or asks for a small prototype/sample.
+
+Practical rule:
+
+- no size specified -> target `500`
+- explicit size specified -> honor the requested count
+- explicit prototype/sample wording -> smaller output is acceptable
+
 ## Installation (All IDEs)
 
 ### Quick Install Script
@@ -112,15 +122,51 @@ curl -fsSL https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill
   bash -s -- --target codex
 ```
 
-## Prompt Routing Examples
+## Example Prompts
 
-| You type... | Route | Main phases used |
-|-------------|-------|------------------|
-| `Generate a 500-row medical triage dataset` | topic-driven generation | strategy -> seed -> verify -> dedup -> export |
-| `Turn these URLs into a training dataset` | URL/reference structuring | strategy -> seed -> verify -> dedup -> export |
-| `Normalize this CSV into OpenAI JSONL` | existing-dataset normalization | strategy -> seed -> verify -> export |
-| `Verify and score this dataset.jsonl` | verify-only audit | data-verifier -> verify -> dedup -> export |
-| `Export the verified set with custom headers` | export-only | formatter-exporter -> export |
+### How prompts route to the skill
+
+You do not need to use explicit flags or command syntax. Natural-language prompts are enough.
+
+- To get a production-sized dataset, just describe the dataset. If you do not specify a size, the skill should target `500` records.
+- To get a larger or smaller dataset, state the number explicitly.
+- To verify or export an existing dataset, say that directly and the skill should route into the DB-backed audit/export flow.
+
+| You type... | Scope | Route | Main phases used |
+|-------------|-------|-------|------------------|
+| `Generate a medical triage dataset` | topic-driven generation | default-size generation | strategy -> seed -> verify -> dedup -> export |
+| `Generate a 2000-example customer support dataset in OpenAI JSONL` | topic-driven generation | user-sized generation | strategy -> seed -> verify -> dedup -> export |
+| `Turn these URLs into a training dataset` | URL/reference structuring | source-to-dataset conversion | strategy -> seed -> verify -> dedup -> export |
+| `Use web research to build a fintech FAQ dataset` | internet-research generation | research-driven generation | strategy -> seed -> verify -> dedup -> export |
+| `Normalize this CSV into OpenAI JSONL` | existing-dataset normalization | import and reshape | strategy -> seed -> verify -> export |
+| `Verify and score this dataset.jsonl` | verify-only audit | audit flow | data-verifier -> verify -> dedup -> export |
+| `Export the verified set with custom headers` | export-only | export shaping | formatter-exporter -> export |
+
+### Prompt examples
+
+```text
+Generate a medical triage dataset for SFT.
+```
+
+```text
+Generate a 1500-example legal intake dataset with hard edge cases and export it as CSV.
+```
+
+```text
+Turn these URLs into a fine-tuning dataset and keep the source URLs in metadata.
+```
+
+```text
+Use web research to build a cybersecurity FAQ dataset for customer support.
+```
+
+```text
+Normalize this CSV into HuggingFace chat format and deduplicate it.
+```
+
+```text
+Verify this dataset, remove weak examples, and export custom columns: prompt, answer, persona, difficulty.
+```
 
 ## Repository Docs
 

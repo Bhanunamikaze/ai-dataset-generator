@@ -13,9 +13,11 @@ This skill is a tool-native dataset pipeline for Codex, Antigravity, and Claude 
 
 ## Command surface
 
-- `dataset generate "<request>" --count <n>`
+- `dataset generate "<request>" [--count <n>]`
 - `dataset verify <path/to/file>`
 - `dataset export --format <openai|huggingface|csv|jsonl|all> [--schema-file path] [--split 0.1]`
+
+If `dataset generate` does not include a size, default to `500` records.
 
 ## Core architecture
 
@@ -44,7 +46,10 @@ Use this when the user wants a new dataset or wants source material structured i
    - `task_type`
    - `source_type`
    - target export schema
+   - target example count
    - whether this is a fresh run or a resume
+
+If the user does not specify a size, set the target example count to `500`.
 2. If existing runs may matter, inspect the SQLite state before generating:
 
 ```bash
@@ -58,6 +63,7 @@ If there is a relevant unfinished or recent run, ask whether to resume or start 
 - Topic-driven synthetic generation:
   - Read `sub-skills/seed-generator.md`.
   - Draft canonical JSONL records and import them with `--source-type generated`.
+  - If the requested count is large, work in batches until the target count is reached instead of stopping after the first small draft.
 - URL or reference-material structuring:
   - Read `sub-skills/seed-generator.md`.
   - Use the IDE's browsing/search/file tools to collect material, then write canonical JSONL drafts and import them with `--source-type url_reference`.
@@ -66,6 +72,7 @@ If there is a relevant unfinished or recent run, ask whether to resume or start 
   - Normalize the source dataset into canonical JSONL and import it with `--source-type raw_dataset`.
 - Internet-research dataset building:
   - Use the IDE's browsing/search tools first, then import canonical JSONL drafts with `--source-type internet_research`.
+  - If the user does not specify a size, continue collecting and drafting until `500` records are planned or imported.
 
 4. Load draft records into SQLite:
 
@@ -74,6 +81,8 @@ python3 scripts/generate.py --input <drafts.jsonl> --source-type <generated|url_
 ```
 
 Imported drafts are promoted into the runnable pipeline with status `raw_generated` unless they are explicit placeholder seeds.
+
+For generation requests, do not treat a small sample as the finished dataset unless the user explicitly asked for a small sample, prototype, or test run.
 
 5. If augmentation is needed, read `sub-skills/diversity-engine.md` and either import rewritten augmentations or create metadata variants:
 
@@ -145,6 +154,17 @@ python3 scripts/export.py --format csv --schema-file <custom_schema.json> --spli
 ```
 
 The flat schema file must validate before export. If the user wants custom headers, start from `resources/templates/custom_flat_schema.json` instead of inventing an ad hoc file shape.
+
+## Natural-language prompt examples
+
+Users do not need to use explicit flags if they describe the task naturally.
+
+- `Generate a medical triage dataset`
+- `Generate a 2000-example customer-support dataset in OpenAI JSONL`
+- `Turn these URLs into a structured dataset for fine-tuning`
+- `Use web research to build a fintech FAQ dataset`
+- `Normalize this CSV into HuggingFace chat format`
+- `Verify and clean this dataset, then export it with custom CSV headers`
 
 ## Reference files
 
