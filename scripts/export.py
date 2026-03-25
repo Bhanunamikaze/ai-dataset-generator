@@ -63,18 +63,61 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def get_cluster_key(record: dict[str, Any]) -> str:
+    # Try explicit metadata keys often used for scenarios/topics
+    meta = record.get("metadata", {})
+    for key in ("scenario", "topic", "intent", "subtopic", "fingerprint"):
+        if key in meta and meta[key]:
+            return str(meta[key])
+    # Fallback: Hash the first few words of the instruction to cluster similar templates
+    import re
+    instr = record.get("instruction", "")
+    words = re.findall(r'\w+', instr.lower())[:6]
+    return "_".join(words)
+
 def split_records(
     records: list[dict[str, Any]],
     split_ratio: float,
     seed: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    shuffled = list(records)
-    random.Random(seed).shuffle(shuffled)
-    test_count = int(len(shuffled) * split_ratio)
-    if split_ratio > 0 and len(shuffled) > 1 and test_count == 0:
-        test_count = 1
-    test_records = shuffled[:test_count]
-    train_records = shuffled[test_count:]
+    if split_ratio <= 0.0 or len(records) < 2:
+        return list(records), []
+
+    # Group records by cluster key
+    from collections import defaultdict
+    clusters = defaultdict(list)
+    for r in records:
+        clusters[get_cluster_key(r)].append(r)
+
+    # Shuffle the cluster keys
+    cluster_keys = list(clusters.keys())
+    random.Random(seed).shuffle(cluster_keys)
+
+    train_records = []
+    test_records = []
+    
+    target_test_count = int(len(records) * split_ratio)
+    if target_test_count == 0:
+        target_test_count = 1
+
+    # Greedily assign clusters to test until we hit the target
+    for key in cluster_keys:
+        if len(test_records) < target_test_count and len(test_records) + len(clusters[key]) <= target_test_count * 1.5:
+            test_records.extend(clusters[key])
+        elif len(test_records) == 0 and len(clusters[key]) >= target_test_count:
+            test_records.extend(clusters[key])
+        else:
+            train_records.extend(clusters[key])
+            
+    if not test_records and cluster_keys:
+        test_records.extend(clusters[cluster_keys[0]])
+        train_records = []
+        for k in cluster_keys[1:]:
+            train_records.extend(clusters[k])
+
+    random.Random(seed).shuffle(train_records)
+    random.Random(seed).shuffle(test_records)
+
     return train_records, test_records
 
 
@@ -363,6 +406,16 @@ def main() -> None:
                 flat_test,
             )
         )
+
+    # Phase 6E: Always dump the raw canonical artifacts alongside target schemas
+    written_files.extend(
+        export_flat_jsonl_pair(
+            output_dir,
+            "canonical",
+            train_records,
+            test_records,
+        )
+    )
 
     summary = summarize_records(
         records,
