@@ -4,6 +4,8 @@
 
 An agentic dataset-generation skill for agent IDEs, built around tool-native reasoning plus a deterministic local pipeline for normalization, verification, deduplication, export, and data-card generation.
 
+**In plain English:** This tool turns your AI coding assistant into an automated data engineer. You just describe the dataset you need in normal language, and the agent automatically researches, writes examples, filters out bad/duplicate responses, and exports a high-quality dataset ready for model training (SFT or DPO).
+
 ## IDE Compatibility
 
 - Antigravity IDE: `.agent/skills/dataset-generator`
