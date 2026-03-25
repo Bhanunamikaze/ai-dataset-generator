@@ -30,6 +30,11 @@ Turn the user request into a concrete dataset plan before any records are writte
 6. Decide ingestion safety mode:
    - red-team, security, pentest, jailbreak, and prompt-injection corpora should default to injection-tolerant import behavior
    - use strict flagging only when the user clearly wants defensive filtering instead
+7. Choose a **platform profile** based on the target LLM:
+   - *Codex*: prioritise raw code, inline comments, and FIM (Fill-in-the-Middle) structures; avoid conversational framing.
+   - *Claude Code*: prioritise multi-turn agentic workflows, tool-use XML formatting (`<tool_use>`, `<result>`), and conversational clarification patterns.
+   - *Antigravity*: prioritise general-purpose instruction-following, mixed formats, and diverse task types.
+8. Apply **benchmark contamination guards**: during planning, explicitly avoid naming conventions, variable names, function names, and problem structures commonly found in HumanEval, MMLU, GSM8K, or MBPP. If the generated instruction resembles a known benchmark problem, re-draft it.
 
 ## Important rule
 
