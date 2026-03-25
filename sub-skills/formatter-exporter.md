@@ -6,6 +6,8 @@ Use this when the user asks for a final dataset file.
 
 - Internal canonical schema is fixed.
 - Final export schema is flexible.
+- Enforce **Cluster-Based Splitting** (Group Shuffle Split). Ensure records sharing the same vulnerability/scenario fingerprint stay together in either train or test, but never both. This prevents holdout leakage.
+- Always output a raw `canonical.jsonl` artifact containing the unformatted instruction/context/response data alongside any formatted exports.
 
 ## Presets
 

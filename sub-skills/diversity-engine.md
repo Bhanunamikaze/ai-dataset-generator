@@ -64,6 +64,7 @@ python3 scripts/augment.py --from-status raw_generated --persona expert --person
 
 ## Guardrails
 
-- Do not create variants that only rename the same example.
+- **Ban "Mad-Libs" slot-filling**: Do not create variants that merely swap entity names or variable names while keeping the exact same reasoning structure.
+- **Enforce Structural Diversity**: Force the LLM to vary the entire reasoning pathway, paragraph structure, and code complexity.
 - Keep semantic coverage wider than surface paraphrase.
 

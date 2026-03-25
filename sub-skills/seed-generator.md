@@ -24,6 +24,8 @@ Create or normalize draft records into the fixed canonical schema.
 
 Instructions with zero constraints are too easy and produce no fine-tuning signal. Re-draft them before writing the record.
 
+**Blind Contexts / Information Asymmetry:** Ensure `<context>` blocks contain only raw, realistic inputs (e.g., raw HTTP traffic or generic error logs). Never leak the root cause, vulnerability mechanism, or explicit hints into the context before the assistant is forced to deduce it.
+
 **Anti-trope guardrails:** Before finalising any response, scan for and remove:
   - Opening preambles: "As an AI…", "Certainly!", "Of course!", "Here is…", "Sure, here’s…", "In summary"
   - Self-referential hedges: "As a language model…", "I should note that…"
