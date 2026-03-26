@@ -40,8 +40,7 @@ python3 -m unittest discover -s tests -p 'test*.py'
 ### Change installation behavior
 
 1. update `install.sh`
-2. update `install.sh.sha256`
-3. update the installation section in `README.md`
+2. update the installation section in `README.md`
 
 ## Validation
 

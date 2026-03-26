@@ -54,7 +54,7 @@
 | T25 | Schema-validation CI fix | Validate only canonical schema fields under `jsonschema` so DB/runtime metadata does not cause CI-only record rejection, and add a regression test for the strict-validator path. | `completed` |
 | T26 | Dependency metadata | Add `requirements.txt` and align CI/dependency installation with the declared runtime dependency set. | `completed` |
 | T27 | Governance docs | Add `LICENSE`, `SECURITY.md`, and `CONTRIBUTING.md` so usage, disclosure, and contribution paths are explicit. | `completed` |
-| T28 | Install hardening | Fix the repo URL in `install.sh`, add checksum-based remote-install guidance, and publish `install.sh.sha256`. | `completed` |
+| T28 | Install hardening | Fix the repo URL in `install.sh` and add safer remote-install guidance. | `completed` |
 | T29 | Untrusted-ingestion guardrails | Strip hostile control characters during normalization, flag likely prompt-injection markers on untrusted sources, and surface review flags in metadata and skill docs. | `completed` |
 | T30 | README polish | Add a CI badge, GitHub metadata guidance, safer install guidance, 500-record rationale, security notes, and a roadmap section. | `completed` |
 | T31 | Lean install payload and tag packaging | Restrict `install.sh` to the runtime skill payload only, and on tag pushes build and publish packaged runtime artifacts in GitHub Actions. | `completed` |

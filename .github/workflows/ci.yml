@@ -71,7 +71,7 @@ jobs:
           path: |
             dist/*
             install.sh
-            install.sh.sha256
+            install.ps1
 
       - name: Publish GitHub release assets
         uses: softprops/action-gh-release@v2
@@ -80,4 +80,4 @@ jobs:
           files: |
             dist/*
             install.sh
-            install.sh.sha256
+            install.ps1

@@ -59,10 +59,8 @@ Examples:
   bash install.sh --target all --project-dir /path/to/project
   bash install.sh --target codex --repo-path /path/to/Agentic-Dataset-Skill
 
-Safer remote install:
+Remote install:
   curl -fsSLO https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh
-  curl -fsSLO https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh.sha256
-  sha256sum -c install.sh.sha256
   bash install.sh --target codex
 EOF
 }
