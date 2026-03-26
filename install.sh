@@ -162,13 +162,13 @@ workspace_root_for_tool() {
             fi
             ;;
         claude)
-            if [[ -d "${PROJECT_DIR}/.claude" ]]; then
+            if [[ "${PROJECT_DIR_EXPLICIT}" -eq 1 || -d "${PROJECT_DIR}/.claude" ]]; then
                 printf '%s\n' "${PROJECT_DIR}/.claude"
                 return 0
             fi
             ;;
         codex)
-            if [[ -d "${PROJECT_DIR}/.codex" ]]; then
+            if [[ "${PROJECT_DIR_EXPLICIT}" -eq 1 || -d "${PROJECT_DIR}/.codex" ]]; then
                 printf '%s\n' "${PROJECT_DIR}/.codex"
                 return 0
             fi

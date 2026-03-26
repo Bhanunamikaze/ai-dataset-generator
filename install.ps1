@@ -149,14 +149,14 @@ function Get-WorkspaceRootForTool {
     }
     'claude' {
       $claudeRoot = Join-Path $PROJECT_DIR '.claude'
-      if (Test-Path -LiteralPath $claudeRoot -PathType Container) {
+      if ($PROJECT_DIR_EXPLICIT -or (Test-Path -LiteralPath $claudeRoot -PathType Container)) {
         return $claudeRoot
       }
       return $null
     }
     'codex' {
       $codexRoot = Join-Path $PROJECT_DIR '.codex'
-      if (Test-Path -LiteralPath $codexRoot -PathType Container) {
+      if ($PROJECT_DIR_EXPLICIT -or (Test-Path -LiteralPath $codexRoot -PathType Container)) {
         return $codexRoot
       }
       return $null

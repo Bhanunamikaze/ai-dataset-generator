@@ -125,7 +125,7 @@ curl -sSL https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/
 Invoke-Expression "& { $(Invoke-RestMethod 'https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.ps1') } --online --target global"
 ```
 
-For a **workspace-first** installation, pass `--target all` with `--project-dir`. Antigravity installs into `<project>/.agent`, and Claude/Codex install into `<project>/.claude` / `<project>/.codex` when those directories already exist; otherwise they fall back to the user-global locations.
+For a **workspace-first** installation, pass `--target all` with `--project-dir`. An explicit `--project-dir` makes all three IDE installs local to that project: Antigravity installs into `<project>/.agent`, Claude into `<project>/.claude`, and Codex into `<project>/.codex`.
 
 **macOS / Linux:**
 ```bash
