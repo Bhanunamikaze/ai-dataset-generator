@@ -177,7 +177,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --online)
             ONLINE_MODE=1
-            TARGET="all"
+            TARGET="global"
             shift
             ;;
         --force)

@@ -175,7 +175,7 @@ while ($idx -lt $args.Count) {
     }
     '--online' {
       $ONLINE_MODE = $true
-      $TARGET = 'all'
+      $TARGET = 'global'
       $idx += 1
       continue
     }
