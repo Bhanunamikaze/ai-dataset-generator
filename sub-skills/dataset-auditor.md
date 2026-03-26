@@ -149,6 +149,31 @@ Steps:
 
 ---
 
+### 2I. Synthetic fingerprint detection
+
+Objective: Detect telltale signs that the dataset is LLM-generated rather than grounded in real-world scenarios.
+
+Steps:
+1. Sample 25% of records. For each, check for these synthetic markers:
+   - **Uniform sentence length**: compute the standard deviation of sentence lengths within the response. Real writing has high variance; LLM output tends toward uniform mid-length sentences.
+   - **Over-polished instructions**: if > 80% of instructions are grammatically perfect, formal, and complete sentences, this is a red flag. Real users write messy.
+   - **Formulaic openings**: count how many responses start with "The", "This", "To", "In order to", or "Here". If > 50%, flag as templated.
+   - **Missing `metadata.source_origin`**: if no records have `source_origin: "real_world"`, the dataset was likely 100% synthesized.
+2. Compute a **synthetic score** (0–100): percentage of sampled records exhibiting 2+ synthetic markers.
+3. Flag as **High** if synthetic score > 70%. **Medium** if 40–70%.
+
+### 2J. Real-world grounding ratio check
+
+Objective: Verify the dataset meets the planned real-world grounding target.
+
+Steps:
+1. Count records with `metadata.source_origin == "real_world"` vs. `"synthetic"`.
+2. Compare against the planned ratio from the strategy document (default target: 60% real-world).
+3. Flag as **Medium** if real-world ratio is below 40%. Flag as **Low** if between 40–60%.
+4. If `metadata.source_origin` is missing from all records, flag as **Medium** — the provenance is untraceable.
+
+---
+
 ## Phase 3 — Structured audit report
 
 After all phases, produce a structured summary. Do **not** just emit raw numbers; classify each finding by severity.
@@ -160,6 +185,7 @@ After all phases, produce a structured summary. Do **not** just emit raw numbers
 **Records passing structural checks**: N (X%)
 **Duplicate rate**: X%
 **Average judge score**: X / 10 (sampled)
+**Real-world grounding ratio**: X%
 
 ### Findings
 
@@ -168,11 +194,13 @@ After all phases, produce a structured summary. Do **not** just emit raw numbers
 | 1 | High     | Split disjointness | 7 scenario fingerprints appear in both train and test |
 | 2 | High     | Context leakage | 22% of sampled records expose the answer in context |
 | 3 | High     | Label balance | "VULNERABLE" = 82% of corpus, "NOT_VULNERABLE" = 18% |
-| 4 | Medium   | Taxonomy coverage | 4 planned buckets have zero records |
-| 5 | Medium   | Quantity adequacy | 180 records found, minimum for DPO is 500 |
-| 6 | Medium   | Reasoning variety | 68% of responses share identical numbered-list structure |
-| 7 | Low      | Balance/randomness | difficulty CV = 0.6, severe skew toward "medium" |
-| 8 | Low      | Response length | CoT responses avg 210 chars — likely truncated traces |
+| 4 | High     | Synthetic fingerprint | synthetic score = 78%, dataset reads as LLM-generated |
+| 5 | Medium   | Taxonomy coverage | 4 planned buckets have zero records |
+| 6 | Medium   | Quantity adequacy | 180 records found, minimum for DPO is 500 |
+| 7 | Medium   | Reasoning variety | 68% of responses share identical numbered-list structure |
+| 8 | Medium   | Grounding ratio | 0% real-world sourced records, 100% synthetic |
+| 9 | Low      | Balance/randomness | difficulty CV = 0.6, severe skew toward "medium" |
+|10 | Low      | Response length | CoT responses avg 210 chars — likely truncated traces |
 
 ### Recommendations
 
@@ -182,6 +210,8 @@ For each High or Medium finding, emit a concrete, actionable fix:
 - "Strip explicit answer tokens from context fields in records flagged for leakage."
 - "Generate 320 more records to reach DPO minimum of 500."
 - "Re-generate NOT_VULNERABLE examples to reach 40–60% class balance."
+- "Research real-world scenarios and re-source at least 60% of records from authentic material."
+- "Vary response openings and instruction formality to reduce synthetic fingerprint below 40%."
 ```
 
 ---

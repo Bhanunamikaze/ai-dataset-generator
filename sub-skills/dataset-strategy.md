@@ -36,6 +36,9 @@ Turn the user request into a concrete dataset plan before any records are writte
    - *Claude Code*: prioritise multi-turn agentic workflows, tool-use XML formatting (`<tool_use>`, `<result>`), and conversational clarification patterns.
    - *Antigravity*: prioritise general-purpose instruction-following, mixed formats, and diverse task types.
 8. Apply **benchmark contamination guards**: during planning, explicitly avoid naming conventions, variable names, function names, and problem structures commonly found in HumanEval, MMLU, GSM8K, or MBPP. If the generated instruction resembles a known benchmark problem, re-draft it.
+9. Define **sourcing strategy**:
+   - **Research-first** (preferred): use IDE search, browsing, and file-reading to collect real-world scenarios before any synthesis. Set a target real-world grounding ratio (default: 60% real-sourced, 40% synthetic gap-fill).
+   - **Synthesis-only**: acceptable only when the user explicitly asks for a fully synthetic dataset, or the domain has no publicly available real-world data. Document why real sourcing was skipped.
 
 ## Important rule
 
@@ -59,6 +62,7 @@ Produce a concise plan with:
 - taxonomy buckets
 - quality requirements
 - ingestion safety mode
+- sourcing strategy and real-world grounding ratio
 - resume or fresh-run decision
 
 Always state the intended example count explicitly. Do not leave it implicit.

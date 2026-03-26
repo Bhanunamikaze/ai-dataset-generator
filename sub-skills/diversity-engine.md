@@ -68,3 +68,11 @@ python3 scripts/augment.py --from-status raw_generated --persona expert --person
 - **Enforce Structural Diversity**: Force the LLM to vary the entire reasoning pathway, paragraph structure, and code complexity.
 - Keep semantic coverage wider than surface paraphrase.
 
+## Anti-templating rules
+
+When reviewing a batch of augmented records, apply these checks before finalising:
+
+1. **Opening sentence test**: Extract the first sentence of every response in the batch. If more than 30% start with the same phrasing pattern (e.g., "The issue is…", "This code…", "To fix this…"), rewrite the repeating ones with different openings.
+2. **Structure fingerprint test**: Classify each response as one of: `concise`, `walkthrough`, `socratic`, `code_first`, `uncertain`, `cot`. If any single shape exceeds 40% of the batch, rewrite extras into under-represented shapes.
+3. **Length variance test**: Compute response lengths. If the standard deviation is less than 20% of the mean, the batch is too uniform. Intentionally make some responses much shorter and others much longer.
+4. **Instruction naturalness check**: At least 20% of augmented instructions should read like a real person typed them — with casual grammar, abbreviations, or slight ambiguity. Do not polish every instruction into a formal prompt.

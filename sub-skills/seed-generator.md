@@ -10,7 +10,15 @@ Create or normalize draft records into the fixed canonical schema.
 
 ### Topic-driven generation
 
-- Draft canonical records directly in JSONL.
+**Research-first, synthesize-second (mandatory):**
+
+Before drafting any synthetic record, the agent must research real-world material first:
+
+1. **Search and collect real examples.** Use the IDE's browsing, search, and file-reading tools to find real-world instances of the target domain: forum posts, bug reports, documentation snippets, GitHub issues, StackOverflow threads, real conversation logs, CVE entries, or any authentic source relevant to the topic.
+2. **Ground each record in a real scenario.** Every seed record should be traceable to a plausible real-world situation. Do not write abstract instructions like "Create example N for topic X." Instead, write instructions that a real user would actually type in a real tool.
+3. **Use synthesis only for gap-filling.** After exhausting real-world sources, use synthesis to fill taxonomy buckets that have zero real-world coverage. Tag these with `metadata.source_origin: "synthetic"` and real-sourced ones with `metadata.source_origin: "real_world"`.
+4. **Target ratio:** aim for at least 60% real-world-grounded records. If you cannot reach 60%, document why in the data card.
+
 - Spread examples across taxonomy, persona, and difficulty.
 - Keep records concrete and non-redundant.
 - Unless the user specifies otherwise, target `500` total records.
@@ -24,10 +32,35 @@ Create or normalize draft records into the fixed canonical schema.
 
 Instructions with zero constraints are too easy and produce no fine-tuning signal. Re-draft them before writing the record.
 
-**Blind Contexts / Information Asymmetry:** Ensure `<context>` blocks contain only raw, realistic inputs (e.g., raw HTTP traffic or generic error logs). Never leak the root cause, vulnerability mechanism, or explicit hints into the context before the assistant is forced to deduce it.
+**Blind Contexts / Information Asymmetry:** Ensure `<context>` blocks contain only raw, realistic inputs. Never leak the root cause, vulnerability mechanism, or explicit hints into the context before the assistant is forced to deduce it.
+
+**Human imperfection injection (mandatory):**
+
+Real users do not write perfectly formatted prompts. To avoid training a model that only responds well to polished inputs, deliberately vary instruction quality:
+
+- **Typos and abbreviations** (10–15% of records): "pls check if vuln", "whats the issue w/ this func", "how do i fix teh error"
+- **Incomplete context** (10–15%): truncated logs, missing HTTP headers, partial stack traces, redacted credentials
+- **Ambiguous instructions** (5–10%): instructions that could be interpreted multiple ways, forcing the response to either clarify or make a stated assumption
+- **Mixed formality** (spread across all): casual Slack-style messages, formal tickets, terse CLI-style one-liners, verbose newcomer questions
+- **Copy-paste artifacts** (5%): extra whitespace, stray line numbers, terminal prompts left in, markdown that didn't render
+
+Tag records with `metadata.instruction_fidelity` using values: `"polished"`, `"casual"`, `"messy"`, `"ambiguous"`.
+
+**Response architecture variety (mandatory):**
+
+Do not let every response follow the same skeleton. Force fundamentally different response shapes:
+
+- **Concise direct answers** (15–25%): 1–3 sentences, no preamble, no steps.
+- **Detailed walkthroughs** (20–30%): multi-paragraph with code, explanations, and caveats.
+- **Socratic pushback** (5–10%): the expert questions the premise, asks for clarification, or explains why the question is wrong before answering.
+- **Code-first responses** (10–20%): the response leads with code and follows with a brief explanation.
+- **Disagreement or uncertainty** (5%): the expert says "I need more information" or "this depends on X" and explains why a single answer isn't possible.
+- **Step-by-step reasoning with `<think>` blocks** (20–40% for reasoning tasks): but vary the depth and structure of the trace itself.
+
+Tag records with `metadata.response_shape` using values: `"concise"`, `"walkthrough"`, `"socratic"`, `"code_first"`, `"uncertain"`, `"cot"`.
 
 **Anti-trope guardrails:** Before finalising any response, scan for and remove:
-  - Opening preambles: "As an AI…", "Certainly!", "Of course!", "Here is…", "Sure, here’s…", "In summary"
+  - Opening preambles: "As an AI…", "Certainly!", "Of course!", "Here is…", "Sure, here's…", "In summary"
   - Self-referential hedges: "As a language model…", "I should note that…"
   - Filler closings: "I hope this helps!", "Let me know if you need anything else."
 
