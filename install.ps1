@@ -175,6 +175,7 @@ while ($idx -lt $args.Count) {
     }
     '--online' {
       $ONLINE_MODE = $true
+      $FORCE = $true
       $TARGET = 'global'
       $idx += 1
       continue
@@ -282,25 +283,33 @@ try {
   Write-Host ''
 
   if ($TARGET -in @('antigravity', 'all')) {
-    $AG_DIR = Join-Path (Join-Path $PROJECT_DIR '.agent/skills') $SKILL_NAME
-    Copy-Skill -Src $SRC_DIR -Dest $AG_DIR -Label 'antigravity-local'
+    try {
+      $AG_DIR = Join-Path (Join-Path $PROJECT_DIR '.agent/skills') $SKILL_NAME
+      Copy-Skill -Src $SRC_DIR -Dest $AG_DIR -Label 'antigravity-local'
+    } catch { Write-Warning "Skipped antigravity-local: $_" }
   }
 
   if ($TARGET -in @('global', 'all')) {
-    $AG_GLOBAL_DIR = Join-Path (Join-Path $HOME '.gemini/antigravity/skills') $SKILL_NAME
-    Copy-Skill -Src $SRC_DIR -Dest $AG_GLOBAL_DIR -Label 'antigravity-global'
+    try {
+      $AG_GLOBAL_DIR = Join-Path (Join-Path $HOME '.gemini/antigravity/skills') $SKILL_NAME
+      Copy-Skill -Src $SRC_DIR -Dest $AG_GLOBAL_DIR -Label 'antigravity-global'
+    } catch { Write-Warning "Skipped antigravity-global: $_" }
   }
 
   if ($TARGET -in @('claude', 'global', 'all')) {
-    $clDir = if ($env:CLAUDE_HOME) { $env:CLAUDE_HOME } else { Join-Path $HOME '.claude' }
-    $CLAUDE_DIR = Join-Path (Join-Path $clDir 'skills') $SKILL_NAME
-    Copy-Skill -Src $SRC_DIR -Dest $CLAUDE_DIR -Label 'claude'
+    try {
+      $clDir = if ($env:CLAUDE_HOME) { $env:CLAUDE_HOME } else { Join-Path $HOME '.claude' }
+      $CLAUDE_DIR = Join-Path (Join-Path $clDir 'skills') $SKILL_NAME
+      Copy-Skill -Src $SRC_DIR -Dest $CLAUDE_DIR -Label 'claude'
+    } catch { Write-Warning "Skipped claude: $_" }
   }
 
   if ($TARGET -in @('codex', 'global', 'all')) {
-    $CODEX_ROOT = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
-    $CODEX_DIR = Join-Path (Join-Path $CODEX_ROOT 'skills') $SKILL_NAME
-    Copy-Skill -Src $SRC_DIR -Dest $CODEX_DIR -Label 'codex'
+    try {
+      $CODEX_ROOT = if ($env:CODEX_HOME) { $env:CODEX_HOME } else { Join-Path $HOME '.codex' }
+      $CODEX_DIR = Join-Path (Join-Path $CODEX_ROOT 'skills') $SKILL_NAME
+      Copy-Skill -Src $SRC_DIR -Dest $CODEX_DIR -Label 'codex'
+    } catch { Write-Warning "Skipped codex: $_" }
   }
 
   if ($INSTALL_DEPS) {

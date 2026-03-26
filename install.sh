@@ -101,7 +101,7 @@ copy_skill() {
     if [[ -e "${dest}" && "${FORCE}" -ne 1 ]]; then
         echo "Error: ${label} target already exists: ${dest}" >&2
         echo "Use --force to overwrite." >&2
-        exit 1
+        return 1
     fi
 
     mkdir -p "$(dirname "${dest}")"
@@ -112,7 +112,7 @@ copy_skill() {
     for required_path in "${REQUIRED_PATHS[@]}"; do
         if [[ ! -e "${src}/${required_path}" ]]; then
             echo "Error: required skill path not found: ${src}/${required_path}" >&2
-            exit 1
+            return 1
         fi
     done
 
@@ -177,6 +177,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --online)
             ONLINE_MODE=1
+            FORCE=1
             TARGET="global"
             shift
             ;;

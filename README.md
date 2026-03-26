@@ -95,6 +95,32 @@ bash install.sh --target codex --repo-path /path/to/Agentic-Dataset-Skill
 
 
 
+### Automatic Online Install
+
+To download the latest release package and install it globally across all IDEs (Antigravity, Claude, Codex) in one step:
+
+**macOS / Linux (Bash):**
+```bash
+curl -sSL https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh | bash -s -- --online
+```
+
+**Windows (PowerShell):**
+```powershell
+Invoke-Expression "& { $(Invoke-RestMethod 'https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.ps1') } --online"
+```
+
+For a **local workspace** installation (e.g. inside an active Antigravity project), pass the explicit `--target all` and `--project-dir` flags:
+
+**macOS / Linux:**
+```bash
+curl -sSL https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh | bash -s -- --online --target all --project-dir /path/to/your/project
+```
+
+**Windows:**
+```powershell
+Invoke-Expression "& { $(Invoke-RestMethod 'https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.ps1') } --online --target all --project-dir C:\path\to\your\project"
+```
+
 ## Python dependency install:
 
 ```bash
