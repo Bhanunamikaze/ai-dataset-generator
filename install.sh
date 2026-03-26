@@ -177,7 +177,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --online)
             ONLINE_MODE=1
-            TARGET="all"
+            TARGET="global"
             shift
             ;;
         --force)
@@ -269,11 +269,12 @@ echo ""
 
 if [[ "${TARGET}" == "antigravity" || "${TARGET}" == "all" ]]; then
     AG_DIR="${PROJECT_DIR}/.agent/skills/${SKILL_NAME}"
-    if ! mkdir -p "$(dirname "${AG_DIR}")" 2>/dev/null; then
-        echo "Warning: Skipped antigravity install. Could not write to ${PROJECT_DIR} (run from a project directory if needed)"
-    else
-        copy_skill "${SRC_DIR}" "${AG_DIR}" "antigravity"
-    fi
+    copy_skill "${SRC_DIR}" "${AG_DIR}" "antigravity-local"
+fi
+
+if [[ "${TARGET}" == "global" || "${TARGET}" == "all" ]]; then
+    AG_GLOBAL_DIR="${HOME}/.gemini/antigravity/skills/${SKILL_NAME}"
+    copy_skill "${SRC_DIR}" "${AG_GLOBAL_DIR}" "antigravity-global"
 fi
 
 if [[ "${TARGET}" == "claude" || "${TARGET}" == "global" || "${TARGET}" == "all" ]]; then
