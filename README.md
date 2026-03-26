@@ -109,16 +109,16 @@ curl -sSL https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/
 Invoke-Expression "& { $(Invoke-RestMethod 'https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.ps1') } --online"
 ```
 
-For a **local workspace** installation (e.g. inside an active Antigravity project), pass the explicit `--target all` and `--project-dir` flags:
+For a **local workspace** installation (e.g. inside an active Antigravity project), pass the explicit `--target antigravity` and `--project-dir` flags:
 
 **macOS / Linux:**
 ```bash
-curl -sSL https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh | bash -s -- --online --target all --project-dir /path/to/your/project
+curl -sSL https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.sh | bash -s -- --online --target antigravity --project-dir /path/to/your/project
 ```
 
 **Windows:**
 ```powershell
-Invoke-Expression "& { $(Invoke-RestMethod 'https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.ps1') } --online --target all --project-dir C:\path\to\your\project"
+Invoke-Expression "& { $(Invoke-RestMethod 'https://raw.githubusercontent.com/Bhanunamikaze/Agentic-Dataset-Skill/main/install.ps1') } --online --target antigravity --project-dir C:\path\to\your\project"
 ```
 
 ## Python dependency install:
