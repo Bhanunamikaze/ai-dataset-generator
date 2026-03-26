@@ -63,6 +63,31 @@ class CanonicalNormalizationTests(unittest.TestCase):
         self.assertEqual(record["response"]["chosen"], "Safe answer")
         self.assertEqual(record["response"]["rejected"], "Unsafe answer")
 
+    def test_normalize_record_infers_source_origin_when_missing(self) -> None:
+        from scripts.utils.canonical import normalize_record
+
+        generated = normalize_record(
+            {
+                "instruction": "Explain output encoding.",
+                "response": {"format": "single", "text": "Encode before rendering."},
+                "metadata": {"difficulty": "medium", "persona": "reviewer"},
+            },
+            source_type="generated",
+        )
+        researched = normalize_record(
+            {
+                "instruction": "Summarize this forum report.",
+                "response": {"format": "single", "text": "The report describes a rendering bug."},
+                "metadata": {"difficulty": "medium", "persona": "reviewer"},
+            },
+            source_type="internet_research",
+        )
+
+        self.assertEqual(generated["metadata"]["source_origin"], "synthetic")
+        self.assertTrue(generated["metadata"]["source_origin_inferred"])
+        self.assertEqual(researched["metadata"]["source_origin"], "real_world")
+        self.assertTrue(researched["metadata"]["source_origin_inferred"])
+
     def test_normalize_record_flags_untrusted_prompt_injection_markers(self) -> None:
         from scripts.utils.canonical import normalize_record
 
@@ -791,6 +816,7 @@ class AdditionalCoverageTests(unittest.TestCase):
                         ],
                         "provenance": {
                             "field": "metadata.source_origin",
+                            "blocking": True,
                             "real_world_values": ["real_world"],
                             "reference_fields": ["metadata.reference_urls", "source_uri"],
                         },
@@ -998,6 +1024,98 @@ class AdditionalCoverageTests(unittest.TestCase):
                 any("response openings" in item for item in summary["recommended_next_focus"])
             )
 
+    def test_coverage_reports_response_length_and_structure_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            input_path = temp_dir / "coverage.jsonl"
+            plan_path = temp_dir / "coverage_plan.json"
+
+            records = [
+                {
+                    "id": "shape_a",
+                    "instruction": "Classify this rendering path.",
+                    "context": "Input reaches a sink without escaping.",
+                    "response": {
+                        "format": "single",
+                        "text": json.dumps(
+                            {
+                                "label": "vulnerable",
+                                "reason": "A" * 120,
+                            }
+                        ),
+                    },
+                    "metadata": {
+                        "response_family": "verdict_first",
+                        "source_origin": "synthetic",
+                    },
+                },
+                {
+                    "id": "shape_b",
+                    "instruction": "Classify this escaping path.",
+                    "context": "Input is encoded before rendering.",
+                    "response": {
+                        "format": "single",
+                        "text": json.dumps(
+                            {
+                                "label": "not_vulnerable",
+                                "reason": "B" * 120,
+                            }
+                        ),
+                    },
+                    "metadata": {
+                        "response_family": "verdict_first",
+                        "source_origin": "synthetic",
+                    },
+                },
+                {
+                    "id": "shape_c",
+                    "instruction": "Classify this parser path.",
+                    "context": "The payload is rejected before rendering.",
+                    "response": {
+                        "format": "single",
+                        "text": "SAFE",
+                    },
+                    "metadata": {
+                        "response_family": "minimal",
+                        "source_origin": "synthetic",
+                    },
+                },
+            ]
+            plan = {
+                "response_length": {
+                    "max_median_chars": 60,
+                    "over_chars_limit": 80,
+                    "max_share_over_limit": 0.5,
+                },
+                "response_structure": {
+                    "max_share": 0.5,
+                    "sample_limit": 5,
+                },
+            }
+
+            input_path.write_text(
+                "".join(json.dumps(item, ensure_ascii=True) + "\n" for item in records),
+                encoding="utf-8",
+            )
+            plan_path.write_text(json.dumps(plan, indent=2), encoding="utf-8")
+
+            result = run_script(
+                "scripts/coverage.py",
+                "--input", str(input_path),
+                "--plan-file", str(plan_path),
+            )
+            summary = json.loads(result.stdout)
+
+            self.assertGreater(summary["response_length"]["median_chars"], 60)
+            self.assertTrue(summary["response_length_findings"])
+            self.assertTrue(summary["response_structure_findings"])
+            self.assertTrue(
+                any("median length" in item or "responses over" in item for item in summary["recommended_next_focus"])
+            )
+            self.assertTrue(
+                any("response structures" in item for item in summary["recommended_next_focus"])
+            )
+
     def test_build_loop_runs_batches_to_completion_and_exports(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_name:
             temp_dir = Path(temp_dir_name)
@@ -1112,6 +1230,8 @@ class AdditionalCoverageTests(unittest.TestCase):
                             "difficulty": "medium",
                             "persona": "reviewer",
                             "subtopic": "reflected",
+                            "response_shape": "concise",
+                            "instruction_fidelity": "casual",
                         },
                     }
                 )
@@ -1129,6 +1249,8 @@ class AdditionalCoverageTests(unittest.TestCase):
                             "difficulty": "medium",
                             "persona": "reviewer",
                             "subtopic": "stored",
+                            "response_shape": "walkthrough",
+                            "instruction_fidelity": "polished",
                         },
                     }
                 )
@@ -1277,11 +1399,13 @@ class AdditionalCoverageTests(unittest.TestCase):
                         ],
                         "provenance": {
                             "field": "metadata.source_origin",
+                            "blocking": True,
                             "real_world_values": ["real_world"],
                             "minimum_real_world_share": 0.5,
                             "reference_fields": ["metadata.reference_urls", "source_uri"],
                         },
                         "response_prefix": {
+                            "blocking": True,
                             "prefix_length": 18,
                             "max_share": 0.5,
                         },
@@ -1314,6 +1438,108 @@ class AdditionalCoverageTests(unittest.TestCase):
             self.assertEqual(summary["stop_reason"], "all_batches_processed")
             self.assertTrue(summary["final_coverage"]["provenance_findings"])
             self.assertTrue(summary["final_coverage"]["response_prefix_findings"])
+
+    def test_build_loop_completion_is_blocked_by_response_length_and_structure_findings(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            temp_dir = Path(temp_dir_name)
+            batch_one = temp_dir / "batch_01.jsonl"
+            batch_two = temp_dir / "batch_02.jsonl"
+            plan_path = temp_dir / "coverage_plan.json"
+            review_path = temp_dir / "review.jsonl"
+
+            batch_one.write_text(
+                json.dumps(
+                    {
+                        "id": "length_loop_a",
+                        "instruction": "Classify this rendering path.",
+                        "context": "Input reaches a sink without escaping.",
+                        "response": {
+                            "format": "single",
+                            "text": json.dumps(
+                                {
+                                    "label": "vulnerable",
+                                    "reason": "A" * 120,
+                                }
+                            ),
+                        },
+                        "metadata": {
+                            "difficulty": "medium",
+                            "persona": "reviewer",
+                            "source_origin": "synthetic",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            batch_two.write_text(
+                json.dumps(
+                    {
+                        "id": "length_loop_b",
+                        "instruction": "Classify this escaping path.",
+                        "context": "Input is encoded before rendering.",
+                        "response": {
+                            "format": "single",
+                            "text": json.dumps(
+                                {
+                                    "label": "not_vulnerable",
+                                    "reason": "B" * 120,
+                                }
+                            ),
+                        },
+                        "metadata": {
+                            "difficulty": "medium",
+                            "persona": "reviewer",
+                            "source_origin": "synthetic",
+                        },
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            plan_path.write_text(
+                json.dumps(
+                    {
+                        "target_effective_count": 2,
+                        "response_length": {
+                            "blocking": True,
+                            "max_median_chars": 60,
+                            "over_chars_limit": 80,
+                            "max_share_over_limit": 0.5,
+                        },
+                        "response_structure": {
+                            "blocking": True,
+                            "max_share": 0.5,
+                        },
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            review_path.write_text(
+                "".join(
+                    json.dumps(item, ensure_ascii=True) + "\n"
+                    for item in [
+                        {"id": "length_loop_a", "score": 5, "reason": "Good.", "status": "pass"},
+                        {"id": "length_loop_b", "score": 5, "reason": "Good.", "status": "pass"},
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = run_script(
+                "scripts/build_loop.py",
+                "--batch", str(batch_one),
+                "--batch", str(batch_two),
+                "--plan-file", str(plan_path),
+                "--review-file", str(review_path),
+            )
+            summary = json.loads(result.stdout)
+
+            self.assertFalse(summary["complete"])
+            self.assertEqual(summary["stop_reason"], "all_batches_processed")
+            self.assertTrue(summary["final_coverage"]["response_length_findings"])
+            self.assertTrue(summary["final_coverage"]["response_structure_findings"])
 
     # ------------------------------------------------------------------
     # Empty-DB edge cases — verify, dedup, export should not crash

@@ -71,17 +71,25 @@ def bucket_keys_for_fields(
     return [separator.join(combo) for combo in product(*value_lists)]
 
 
-def plan_required_fields(plan: Mapping[str, Any]) -> list[str]:
+def section_is_blocking(plan: Mapping[str, Any], section_name: str, *, default: bool = False) -> bool:
+    section = plan.get(section_name) or {}
+    if isinstance(section, Mapping) and "blocking" in section:
+        return bool(section.get("blocking"))
+    return default
+
+
+def plan_required_fields(plan: Mapping[str, Any], *, include_provenance: bool = True) -> list[str]:
     fields: list[str] = []
     for item in ensure_string_list(plan.get("required_fields")):
         fields.append(item)
     for item in ensure_string_list(plan.get("required_metadata_fields")):
         fields.append(item if item.startswith("metadata.") else f"metadata.{item}")
-    provenance = plan.get("provenance") or {}
-    if isinstance(provenance, Mapping):
-        field = str(provenance.get("field", "")).strip()
-        if field:
-            fields.append(field)
+    if include_provenance:
+        provenance = plan.get("provenance") or {}
+        if isinstance(provenance, Mapping):
+            field = str(provenance.get("field", "")).strip()
+            if field:
+                fields.append(field)
 
     unique: list[str] = []
     seen: set[str] = set()

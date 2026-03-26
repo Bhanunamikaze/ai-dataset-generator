@@ -79,6 +79,7 @@ For specialized classification corpora, also populate:
 
 Do not leave these to inference later. If the metadata is missing, the coverage script cannot tell what to generate next.
 If a record is marked `metadata.source_origin: "real_world"`, include traceable provenance such as `metadata.reference_urls`, `metadata.source_path`, or `source_uri`.
+If `metadata.source_origin` is omitted, the pipeline now infers a fallback (`synthetic` for generated drafts, `real_world` for URL/research imports, `unknown` for raw datasets), but explicit provenance is still preferred.
 
 **Anti-trope guardrails:** Before finalising any response, scan for and remove:
   - Opening preambles: "As an AI…", "Certainly!", "Of course!", "Here is…", "Sure, here's…", "In summary"

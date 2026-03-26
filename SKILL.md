@@ -128,8 +128,12 @@ The coverage plan should define:
 - optional `required_fields` for metadata or provenance paths that every kept record must carry
 - optional `joint_group_rules` for multi-axis balance such as `difficulty x label` or `persona x response_shape`
 - optional `provenance` rules such as a minimum `real_world` share and required reference fields for real-world records
+- optional `response_length` rules to cap median answer size or the share of oversized responses
+- optional `response_structure` rules to prevent one dominant JSON or text skeleton from taking over the corpus
 - optional `response_prefix` limits to prevent one repeated opening from dominating the corpus
 - optional `require_review_file: true` to make semantic LLM review mandatory during the build loop
+
+These advanced sections are advisory unless you set `blocking: true` inside that section. This keeps fixed-envelope or HTTP-heavy datasets from being rejected by default while still surfacing the findings.
 
 If the effective count is still below target or any bucket is under its minimum, draft another batch aimed only at the missing buckets.
 

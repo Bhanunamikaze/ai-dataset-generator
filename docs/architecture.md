@@ -66,7 +66,7 @@ Responsibilities:
 
 - normalize/import canonical records
 - orchestrate batch-wise quality loops across generate -> verify -> dedup -> coverage -> export
-- measure effective post-dedup count, bucket gaps, joint-bucket skew, provenance, response-prefix repetition, and metadata completeness during generation
+- measure effective post-dedup count, bucket gaps, joint-bucket skew, provenance, response-length drift, response-structure collapse, response-prefix repetition, and metadata completeness during generation
 - manage resumable SQLite state
 - apply deterministic heuristics plus plan-driven required-field and provenance gates
 - apply duplicate suppression

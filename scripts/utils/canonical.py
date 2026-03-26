@@ -69,6 +69,14 @@ def coerce_metadata(raw: Mapping[str, Any], source_type: str) -> dict[str, Any]:
     metadata.setdefault("difficulty", str(_pick(raw, DIFFICULTY_KEYS, "unspecified")))
     metadata.setdefault("persona", str(_pick(raw, PERSONA_KEYS, "general")))
     metadata.setdefault("source_type", str(raw.get("source_type", source_type)))
+    if metadata.get("source_origin") in (None, ""):
+        if source_type in ("url_reference", "internet_research"):
+            metadata["source_origin"] = "real_world"
+        elif source_type == "generated":
+            metadata["source_origin"] = "synthetic"
+        else:
+            metadata["source_origin"] = "unknown"
+        metadata.setdefault("source_origin_inferred", True)
     tags = metadata.get("tags")
     if isinstance(tags, str):
         metadata["tags"] = [item.strip() for item in tags.split(",") if item.strip()]

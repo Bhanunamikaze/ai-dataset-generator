@@ -36,7 +36,10 @@ Turn the user request into a concrete dataset plan before any records are writte
    - define `required_fields` for metadata or provenance that must never be missing on kept records
    - define `joint_group_rules` when single-axis balance is insufficient, for example `difficulty x label` or `persona x response_shape`
    - define provenance requirements such as minimum `real_world` share and traceable reference fields
+   - define `response_length` limits when the task needs short or tightly bounded outputs
+   - define `response_structure` limits when one JSON or text skeleton would otherwise dominate the dataset
    - define `response_prefix` limits when repeated openings or templated answer scaffolds are a risk
+   - choose which advanced quality sections are advisory versus blocking; by default these should stay advisory unless the user explicitly wants them enforced as hard completion gates
 7. Decide ingestion safety mode:
    - red-team, security, pentest, jailbreak, and prompt-injection corpora should default to injection-tolerant import behavior
    - use strict flagging only when the user clearly wants defensive filtering instead

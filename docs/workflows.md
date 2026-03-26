@@ -92,8 +92,12 @@ Generic plan fields now supported by `scripts/coverage.py` and `scripts/verify.p
 - `max_share_per_group`
 - `joint_group_rules`
 - `provenance`
+- `response_length`
+- `response_structure`
 - `response_prefix`
 - `require_review_file`
+
+Advanced quality sections are warn-only by default. Add `blocking: true` inside `provenance`, `response_length`, `response_structure`, or `response_prefix` only when you want that specific issue to prevent completion.
 
 ## Audit & Verify Flow
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import sys
 from collections import Counter
 from pathlib import Path
@@ -29,6 +30,13 @@ DEFAULT_GROUP_FIELDS = [
     "metadata.topic",
     "metadata.subtopic",
     "metadata.intent",
+    "metadata.source_origin",
+    "metadata.response_shape",
+    "metadata.instruction_fidelity",
+]
+
+DEFAULT_REQUIRED_FIELDS = [
+    "metadata.source_origin",
     "metadata.response_shape",
     "metadata.instruction_fidelity",
 ]
@@ -69,7 +77,7 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Optional JSON plan with target_effective_count, max_share_per_group, "
             "group_minimums, required_fields, provenance rules, joint_group_rules, "
-            "and response_prefix limits."
+            "response_prefix limits, response_length limits, and response_structure limits."
         ),
     )
     parser.add_argument(
@@ -278,6 +286,169 @@ def primary_response_text(record: dict[str, Any]) -> str:
     return str(response.get("text", ""))
 
 
+def percentile(values: list[int], fraction: float) -> int:
+    if not values:
+        return 0
+    ordered = sorted(values)
+    index = min(max(int(round((len(ordered) - 1) * fraction)), 0), len(ordered) - 1)
+    return int(ordered[index])
+
+
+def compute_response_length(
+    records: list[dict[str, Any]],
+    plan: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    config = plan.get("response_length") or {}
+    if not isinstance(config, dict) or not config:
+        return None, []
+
+    lengths = [len(primary_response_text(record).strip()) for record in records]
+    if not lengths:
+        return {
+            "median_chars": 0,
+            "p90_chars": 0,
+            "max_chars": 0,
+            "share_over_limit": 0.0,
+            "over_limit": int(config.get("over_chars_limit", 0) or 0),
+        }, []
+
+    median_chars = int(statistics.median(lengths))
+    p90_chars = percentile(lengths, 0.9)
+    max_chars = max(lengths)
+    over_limit = int(config.get("over_chars_limit", 0) or 0)
+    over_limit_count = sum(1 for value in lengths if over_limit > 0 and value > over_limit)
+    share_over_limit = (over_limit_count / len(lengths)) if over_limit > 0 else 0.0
+
+    findings: list[dict[str, Any]] = []
+    max_median_chars = config.get("max_median_chars")
+    if max_median_chars not in (None, "") and median_chars > int(max_median_chars):
+        findings.append(
+            {
+                "type": "median_chars",
+                "median_chars": median_chars,
+                "max_median_chars": int(max_median_chars),
+            }
+        )
+    max_share_over_limit = config.get("max_share_over_limit")
+    if (
+        over_limit > 0
+        and max_share_over_limit not in (None, "")
+        and share_over_limit > float(max_share_over_limit)
+    ):
+        findings.append(
+            {
+                "type": "share_over_limit",
+                "over_limit": over_limit,
+                "share": round(share_over_limit, 4),
+                "max_share": float(max_share_over_limit),
+                "count": over_limit_count,
+            }
+        )
+
+    return {
+        "median_chars": median_chars,
+        "p90_chars": p90_chars,
+        "max_chars": max_chars,
+        "share_over_limit": round(share_over_limit, 4),
+        "over_limit": over_limit,
+    }, findings
+
+
+def structure_shape(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            "type": "object",
+            "keys": {key: structure_shape(item) for key, item in sorted(value.items())},
+        }
+    if isinstance(value, list):
+        item_shapes = sorted(
+            {json.dumps(structure_shape(item), sort_keys=True) for item in value}
+        )
+        return {"type": "array", "items": item_shapes}
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return "number"
+    if value is None:
+        return "null"
+    return "string"
+
+
+def structure_display(value: Any) -> str:
+    if isinstance(value, dict):
+        return "object(" + ",".join(sorted(value.keys())) + ")"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return "number"
+    if value is None:
+        return "null"
+    return "string"
+
+
+def response_structure_signature(text: str) -> tuple[str, str]:
+    stripped = text.strip()
+    if not stripped:
+        return "empty", "empty"
+    if stripped.startswith("{") or stripped.startswith("["):
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            return "plain_text", "plain_text"
+        return json.dumps(structure_shape(payload), sort_keys=True), structure_display(payload)
+    return "plain_text", "plain_text"
+
+
+def compute_response_structure(
+    records: list[dict[str, Any]],
+    plan: dict[str, Any],
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    config = plan.get("response_structure") or {}
+    if not isinstance(config, dict) or not config:
+        return None, []
+
+    sample_limit = int(config.get("sample_limit", 10))
+    max_share = config.get("max_share")
+    counter: Counter[str] = Counter()
+    display_map: dict[str, str] = {}
+    for record in records:
+        signature, display = response_structure_signature(primary_response_text(record))
+        counter[signature] += 1
+        display_map.setdefault(signature, display)
+
+    top_structures = [
+        {
+            "signature": display_map[key],
+            "count": count,
+            "share": round(count / len(records), 4) if records else 0.0,
+        }
+        for key, count in counter.most_common(sample_limit)
+    ]
+
+    findings: list[dict[str, Any]] = []
+    if max_share not in (None, "") and records:
+        max_share_value = float(max_share)
+        for signature, count in counter.items():
+            share = count / len(records)
+            if count <= 1 or share <= max_share_value:
+                continue
+            findings.append(
+                {
+                    "signature": display_map[signature],
+                    "count": count,
+                    "share": round(share, 4),
+                    "max_share": max_share_value,
+                }
+            )
+    findings.sort(key=lambda item: (-float(item["share"]), item["signature"]))
+    return {
+        "top_structures": top_structures,
+        "max_share": float(max_share) if max_share not in (None, "") else None,
+    }, findings
+
+
 def compute_response_prefix(
     records: list[dict[str, Any]],
     plan: dict[str, Any],
@@ -418,6 +589,8 @@ def build_recommendations(
     joint_mode_collapse: list[dict[str, Any]],
     provenance_findings: list[dict[str, Any]],
     response_prefix_findings: list[dict[str, Any]],
+    response_length_findings: list[dict[str, Any]],
+    response_structure_findings: list[dict[str, Any]],
 ) -> list[str]:
     recommendations: list[str] = []
     if target_gap and target_gap > 0:
@@ -453,6 +626,19 @@ def build_recommendations(
         recommendations.append(
             f"Rewrite overused response openings like '{item['prefix']}' until they fall below {item['max_share']:.2f} share."
         )
+    for item in response_length_findings:
+        if item["type"] == "median_chars":
+            recommendations.append(
+                f"Shorten responses so median length falls below {item['max_median_chars']} characters."
+            )
+        elif item["type"] == "share_over_limit":
+            recommendations.append(
+                f"Reduce responses over {item['over_limit']} characters until they fall below {item['max_share']:.2f} share."
+            )
+    for item in response_structure_findings[:5]:
+        recommendations.append(
+            f"Diversify response structures so '{item['signature']}' falls below {item['max_share']:.2f} share."
+        )
     return recommendations
 
 
@@ -478,13 +664,15 @@ def main() -> None:
     missing_metadata = compute_missing_metadata(
         effective_records,
         len(effective_records),
-        required_fields or group_fields,
+        required_fields or DEFAULT_REQUIRED_FIELDS,
     )
     joint_group_counts, joint_coverage_gaps, joint_mode_collapse = compute_joint_groups(
         effective_records,
         plan,
     )
     provenance_summary, provenance_findings = compute_provenance(effective_records, plan)
+    response_length_summary, response_length_findings = compute_response_length(effective_records, plan)
+    response_structure_summary, response_structure_findings = compute_response_structure(effective_records, plan)
     response_prefix_summary, response_prefix_findings = compute_response_prefix(effective_records, plan)
 
     target_effective_count = plan.get("target_effective_count")
@@ -508,6 +696,10 @@ def main() -> None:
         "joint_mode_collapse": joint_mode_collapse,
         "provenance": provenance_summary,
         "provenance_findings": provenance_findings,
+        "response_length": response_length_summary,
+        "response_length_findings": response_length_findings,
+        "response_structure": response_structure_summary,
+        "response_structure_findings": response_structure_findings,
         "response_prefix": response_prefix_summary,
         "response_prefix_findings": response_prefix_findings,
         "target_effective_count": (
@@ -522,6 +714,8 @@ def main() -> None:
             joint_mode_collapse=joint_mode_collapse,
             provenance_findings=provenance_findings,
             response_prefix_findings=response_prefix_findings,
+            response_length_findings=response_length_findings,
+            response_structure_findings=response_structure_findings,
         ),
         "duplicates": duplicate_details[:50],
     }

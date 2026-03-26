@@ -27,7 +27,7 @@ The skill operates in a continuous agentic loop, splitting work between reasonin
 - Shared utility modules: `8`
 - Internal canonical schema: `1`
 - Preset export schemas: `3`
-- Automated tests: `43`
+- Automated tests: `46`
 
 ## Features
 
@@ -248,8 +248,12 @@ The coverage plan is now the generic quality-control contract for any dataset ty
 - `max_share_per_group`: single-axis mode-collapse ceiling
 - `joint_group_rules`: optional multi-axis rules with `fields`, optional `minimums`, and optional `max_share`
 - `provenance`: optional real-world grounding rules, including `minimum_real_world_share` and traceable `reference_fields`
+- `response_length`: optional caps for median response size and the share of records above a maximum length
+- `response_structure`: optional cap on one dominant response signature, useful when responses are JSON-shaped
 - `response_prefix`: optional repeated-opening cap using `prefix_length` and `max_share`
 - `require_review_file`: when `true`, `scripts/build_loop.py` refuses to run without `--review-file`
+
+Advanced quality gates such as `provenance`, `response_length`, `response_structure`, and `response_prefix` are advisory by default. Set `blocking: true` inside a section only when you want that rule to stop the build loop from completing.
 
 Those reasoning-heavy phases are handled by the host IDE agent via [`SKILL.md`](./SKILL.md) and [`sub-skills/`](./sub-skills/), which matches the Codex / Antigravity / Claude Code skill model.
 

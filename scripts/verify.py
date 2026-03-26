@@ -18,6 +18,7 @@ from scripts.utils.coverage_plan import (
     load_plan,
     plan_required_fields,
     resolve_path,
+    section_is_blocking,
     values_for_field,
 )
 from scripts.utils.db import (
@@ -161,7 +162,7 @@ def heuristic_errors(record: dict[str, Any], args: argparse.Namespace, plan: dic
             errors.append(f"required field missing: {field}")
 
     provenance = plan.get("provenance") or {}
-    if isinstance(provenance, dict):
+    if isinstance(provenance, dict) and section_is_blocking(plan, "provenance"):
         provenance_field = str(provenance.get("field", "metadata.source_origin"))
         real_world_values = set(ensure_string_list(provenance.get("real_world_values")) or ["real_world"])
         reference_fields = ensure_string_list(provenance.get("reference_fields"))

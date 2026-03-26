@@ -12,7 +12,7 @@ from typing import Any
 if __name__ == "__main__" or not getattr(sys.modules.get(__name__, None), "__package__", None):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.utils.coverage_plan import load_plan
+from scripts.utils.coverage_plan import load_plan, plan_required_fields, section_is_blocking
 from scripts.utils.files import write_json
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -295,20 +295,45 @@ def build_export_args(args: argparse.Namespace, db_path: Path, output_dir: Path)
     return command
 
 
-def coverage_complete(coverage: dict[str, Any], *, plan_file: str | None) -> bool:
-    if not plan_file:
+def coverage_complete(coverage: dict[str, Any], *, plan: dict[str, Any]) -> bool:
+    if not plan:
         return False
     target_gap = coverage.get("target_effective_gap")
     target_satisfied = target_gap in (None, 0)
+    blocking_required_fields = set(plan_required_fields(plan, include_provenance=False))
+    if section_is_blocking(plan, "provenance"):
+        provenance = plan.get("provenance") or {}
+        if isinstance(provenance, dict):
+            field = str(provenance.get("field", "")).strip()
+            if field:
+                blocking_required_fields.add(field)
+    missing_metadata = coverage.get("missing_metadata") or []
+    blocking_missing_metadata = [
+        item for item in missing_metadata if str(item.get("field")) in blocking_required_fields
+    ]
     return bool(
         target_satisfied
         and not coverage.get("coverage_gaps")
         and not coverage.get("mode_collapse")
-        and not coverage.get("missing_metadata")
+        and not blocking_missing_metadata
         and not coverage.get("joint_coverage_gaps")
         and not coverage.get("joint_mode_collapse")
-        and not coverage.get("provenance_findings")
-        and not coverage.get("response_prefix_findings")
+        and (
+            not section_is_blocking(plan, "provenance")
+            or not coverage.get("provenance_findings")
+        )
+        and (
+            not section_is_blocking(plan, "response_length")
+            or not coverage.get("response_length_findings")
+        )
+        and (
+            not section_is_blocking(plan, "response_structure")
+            or not coverage.get("response_structure_findings")
+        )
+        and (
+            not section_is_blocking(plan, "response_prefix")
+            or not coverage.get("response_prefix_findings")
+        )
     )
 
 
@@ -361,7 +386,7 @@ def main() -> None:
         batch_summary["coverage"] = run_json_script("coverage.py", build_coverage_args(args, db_path))
         summary["batches_processed"].append(batch_summary)
         summary["final_coverage"] = batch_summary["coverage"]
-        summary["complete"] = coverage_complete(batch_summary["coverage"], plan_file=args.plan_file)
+        summary["complete"] = coverage_complete(batch_summary["coverage"], plan=plan)
 
         if summary["complete"] and not args.keep_going:
             summary["stop_reason"] = "coverage_plan_satisfied"
