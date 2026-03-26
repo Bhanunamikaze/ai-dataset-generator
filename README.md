@@ -252,7 +252,7 @@ The coverage plan is now the generic quality-control contract for any dataset ty
 - `response_length`: optional caps for median response size and the share of records above a maximum length
 - `response_structure`: optional cap on one dominant response signature, useful when responses are JSON-shaped
 - `response_prefix`: optional repeated-opening cap using `prefix_length` and `max_share`
-- `model_visibility`: optional export-time sanitization rules for model-visible `instruction` and `context`, including line-prefix removal, line dropping based on answer-bearing field hits, and value redaction
+- `model_visibility`: export-time sanitization rules for model-visible `instruction` and `context`, including line-prefix removal, line dropping based on answer-bearing field hits, and value redaction. If omitted, export now applies a conservative built-in profile by default; set `"enabled": false` to disable it.
 - `require_review_file`: when `true`, `scripts/build_loop.py` refuses to run without `--review-file`
 
 Advanced quality gates such as `provenance`, `response_length`, `response_structure`, and `response_prefix` are advisory by default. Set `blocking: true` inside a section only when you want that rule to stop the build loop from completing.

@@ -131,7 +131,7 @@ The coverage plan should define:
 - optional `response_length` rules to cap median answer size or the share of oversized responses
 - optional `response_structure` rules to prevent one dominant JSON or text skeleton from taking over the corpus
 - optional `response_prefix` limits to prevent one repeated opening from dominating the corpus
-- optional `model_visibility` rules to sanitize model-visible `instruction` and `context` during export without dropping audit metadata
+- optional `model_visibility` rules to customize export-time sanitization for model-visible `instruction` and `context` without dropping audit metadata. If omitted, export applies a conservative built-in profile; set `"enabled": false` to disable it.
 - optional `require_review_file: true` to make semantic LLM review mandatory during the build loop
 
 These advanced sections are advisory unless you set `blocking: true` inside that section. This keeps fixed-envelope or HTTP-heavy datasets from being rejected by default while still surfacing the findings.

@@ -1835,6 +1835,80 @@ class AdditionalCoverageTests(unittest.TestCase):
         self.assertNotIn("vulnerable", sanitized["context"].lower())
         self.assertEqual(sanitized["metadata"], record["metadata"])
 
+    def test_default_model_visibility_applies_loose_prompt_sanitization(self) -> None:
+        from scripts.utils.visibility import sanitize_record_for_model_visibility
+
+        record = {
+            "instruction": (
+                "Validate whether this trace is exploitable.\n"
+                "Environment: assess whether invoice reaches json_filter_concat in json_string_predicate.\n"
+                "Trace fingerprint: app tickets invoice error_based json_filter_concat\n"
+                "Focus parameter: invoice\n"
+            ),
+            "context": (
+                "Use the supplied request and response only.\n"
+                "Validation lens: correlate invoice with json_filter_concat in json_string_predicate.\n"
+                "Case fingerprint: app tickets invoice error_based json_filter_concat\n"
+            ),
+            "response": {
+                "format": "single",
+                "text": json.dumps(
+                    {
+                        "verdict": "vulnerable",
+                        "confidence": "high",
+                        "sqli_type": "error_based",
+                        "tested_parameter": "invoice",
+                        "context": "json_string_predicate",
+                        "sink": "json_filter_concat",
+                    }
+                ),
+            },
+            "metadata": {"difficulty": "medium", "persona": "reviewer"},
+        }
+
+        sanitized, changes = sanitize_record_for_model_visibility(record, {})
+
+        self.assertTrue(changes["instruction"])
+        self.assertTrue(changes["context"])
+        self.assertNotIn("Trace fingerprint:", sanitized["instruction"])
+        self.assertNotIn("Focus parameter:", sanitized["instruction"])
+        self.assertNotIn("json_filter_concat", sanitized["instruction"])
+        self.assertNotIn("error_based", sanitized["instruction"])
+        self.assertNotIn("Validation lens:", sanitized["context"])
+        self.assertNotIn("Case fingerprint:", sanitized["context"])
+        self.assertNotIn("json_filter_concat", sanitized["context"])
+        self.assertNotIn("json_string_predicate", sanitized["context"])
+
+    def test_model_visibility_can_be_explicitly_disabled(self) -> None:
+        from scripts.utils.visibility import sanitize_record_for_model_visibility
+
+        record = {
+            "instruction": "Trace fingerprint: app tickets invoice error_based json_filter_concat",
+            "context": "Validation lens: correlate invoice with json_filter_concat.",
+            "response": {
+                "format": "single",
+                "text": json.dumps(
+                    {
+                        "verdict": "vulnerable",
+                        "sqli_type": "error_based",
+                        "tested_parameter": "invoice",
+                        "sink": "json_filter_concat",
+                    }
+                ),
+            },
+            "metadata": {"difficulty": "medium", "persona": "reviewer"},
+        }
+
+        sanitized, changes = sanitize_record_for_model_visibility(
+            record,
+            {"model_visibility": {"enabled": False}},
+        )
+
+        self.assertFalse(changes["instruction"])
+        self.assertFalse(changes["context"])
+        self.assertEqual(sanitized["instruction"], record["instruction"])
+        self.assertEqual(sanitized["context"], record["context"])
+
     def test_build_loop_export_applies_model_visibility_rules_from_plan(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir_name:
             temp_dir = Path(temp_dir_name)

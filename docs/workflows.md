@@ -100,7 +100,7 @@ Generic plan fields now supported by `scripts/coverage.py` and `scripts/verify.p
 
 Advanced quality sections are warn-only by default. Add `blocking: true` inside `provenance`, `response_length`, `response_structure`, or `response_prefix` only when you want that specific issue to prevent completion.
 
-When the dataset keeps answer-bearing metadata for audit or analytics but the model should not see those values verbatim, define `model_visibility` in the plan. `scripts/export.py` and `scripts/build_loop.py --export-format ...` will apply those rules to exported `instruction` and `context` fields while leaving metadata intact.
+When the dataset keeps answer-bearing metadata for audit or analytics but the model should not see those values verbatim, define `model_visibility` in the plan. `scripts/export.py` and `scripts/build_loop.py --export-format ...` will apply those rules to exported `instruction` and `context` fields while leaving metadata intact. If `model_visibility` is omitted, export now applies a conservative built-in profile by default; set `"enabled": false` to disable it for a raw export.
 
 ## Audit & Verify Flow
 

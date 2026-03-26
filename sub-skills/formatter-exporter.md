@@ -7,7 +7,7 @@ Use this when the user asks for a final dataset file.
 - Internal canonical schema is fixed.
 - Final export schema is flexible.
 - Enforce **Cluster-Based Splitting** (Group Shuffle Split). Ensure records sharing the same vulnerability/scenario fingerprint stay together in either train or test, but never both. This prevents holdout leakage.
-- Always output a `canonical.jsonl` artifact alongside any formatted exports. When the coverage plan defines `model_visibility`, exported `instruction` and `context` are sanitized for model consumption while metadata stays intact.
+- Always output a `canonical.jsonl` artifact alongside any formatted exports. Export now applies a conservative built-in prompt-sanitization profile by default; when the coverage plan defines `model_visibility`, those rules override the default, and `"enabled": false` disables sanitization for raw exports. Metadata stays intact.
 
 ## Presets
 

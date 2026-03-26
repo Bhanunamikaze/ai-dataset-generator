@@ -7,6 +7,58 @@ from typing import Any, Mapping
 from .coverage_plan import ensure_string_list, resolve_path
 
 DEFAULT_REPLACEMENT = "[redacted]"
+DEFAULT_RESPONSE_FIELD_EXCLUDES = {
+    "confidence",
+    "reason",
+    "rationale",
+    "reasoning",
+    "explanation",
+    "evidence",
+    "next_step",
+    "next_steps",
+    "summary",
+    "details",
+    "note",
+    "notes",
+    "fix",
+    "fixes",
+    "mitigation",
+    "mitigations",
+    "recommendation",
+    "recommendations",
+    "action",
+    "actions",
+}
+DEFAULT_MODEL_VISIBILITY = {
+    "instruction": {
+        "remove_line_prefixes": [
+            "Trace fingerprint:",
+            "Case fingerprint:",
+            "Focus parameter:",
+            "Candidate ",
+            "Analysis note:",
+        ],
+        "auto_remove_lines_with_response_fields": {
+            "min_hits": 2,
+            "exclude_fields": sorted(DEFAULT_RESPONSE_FIELD_EXCLUDES),
+        },
+    },
+    "context": {
+        "remove_line_prefixes": [
+            "Trace fingerprint:",
+            "Case fingerprint:",
+            "Focus parameter:",
+            "Candidate ",
+            "Validation lens:",
+            "Triage lens:",
+            "Analysis note:",
+        ],
+        "auto_remove_lines_with_response_fields": {
+            "min_hits": 2,
+            "exclude_fields": sorted(DEFAULT_RESPONSE_FIELD_EXCLUDES),
+        },
+    },
+}
 
 
 def _parsed_response_payload(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -56,6 +108,29 @@ def _iter_scalar_strings(value: Any) -> list[str]:
     return []
 
 
+def _response_field_values(
+    record: Mapping[str, Any],
+    *,
+    exclude_fields: set[str],
+) -> list[str]:
+    payload = _parsed_response_payload(record)
+    if payload is None:
+        return []
+
+    values: list[str] = []
+    seen: set[str] = set()
+    for key, value in payload.items():
+        if str(key).strip().lower() in exclude_fields:
+            continue
+        for item in _iter_scalar_strings(value):
+            item_key = item.lower()
+            if item_key in seen:
+                continue
+            seen.add(item_key)
+            values.append(item)
+    return values
+
+
 def _field_values(record: Mapping[str, Any], paths: list[str]) -> list[str]:
     values: list[str] = []
     seen: set[str] = set()
@@ -67,6 +142,17 @@ def _field_values(record: Mapping[str, Any], paths: list[str]) -> list[str]:
             seen.add(key)
             values.append(item)
     return values
+
+
+def effective_model_visibility(plan: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
+    visibility = plan.get("model_visibility")
+    if visibility is None:
+        return dict(DEFAULT_MODEL_VISIBILITY), "default_loose"
+    if not isinstance(visibility, Mapping):
+        return {}, "disabled"
+    if visibility.get("enabled") is False:
+        return {}, "disabled"
+    return dict(visibility), "configured"
 
 
 def _value_pattern(value: str, *, case_sensitive: bool) -> re.Pattern[str]:
@@ -101,6 +187,19 @@ def sanitize_prompt_text(
         line_paths = ensure_string_list(line_removal.get("paths") or line_removal.get("fields"))
         line_min_hits = max(1, int(line_removal.get("min_hits", 1))) if line_paths else 0
 
+    auto_line_removal = config.get("auto_remove_lines_with_response_fields") or {}
+    auto_line_min_hits = 0
+    auto_line_values: list[str] = []
+    if isinstance(auto_line_removal, Mapping) and auto_line_removal.get("enabled", True):
+        auto_line_min_hits = max(1, int(auto_line_removal.get("min_hits", 2)))
+        exclude_fields = {
+            item.lower()
+            for item in ensure_string_list(auto_line_removal.get("exclude_fields"))
+        }
+        if not exclude_fields:
+            exclude_fields = set(DEFAULT_RESPONSE_FIELD_EXCLUDES)
+        auto_line_values = _response_field_values(record, exclude_fields=exclude_fields)
+
     redact_paths = ensure_string_list(
         config.get("redact_field_values") or config.get("redact_fields")
     )
@@ -112,6 +211,10 @@ def sanitize_prompt_text(
     redact_patterns = [
         _value_pattern(value, case_sensitive=case_sensitive)
         for value in _field_values(record, redact_paths)
+    ]
+    auto_line_patterns = [
+        _value_pattern(value, case_sensitive=case_sensitive)
+        for value in auto_line_values
     ]
 
     lines_out: list[str] = []
@@ -127,6 +230,11 @@ def sanitize_prompt_text(
         if stripped and line_patterns:
             hit_count = sum(1 for pattern in line_patterns if pattern.search(line))
             if hit_count >= line_min_hits:
+                modified = True
+                continue
+        if stripped and auto_line_patterns:
+            hit_count = sum(1 for pattern in auto_line_patterns if pattern.search(line))
+            if hit_count >= auto_line_min_hits:
                 modified = True
                 continue
 
@@ -153,8 +261,8 @@ def sanitize_record_for_model_visibility(
     record: Mapping[str, Any],
     plan: Mapping[str, Any],
 ) -> tuple[dict[str, Any], dict[str, bool]]:
-    visibility = plan.get("model_visibility") or {}
-    if not isinstance(visibility, Mapping) or not visibility:
+    visibility, _mode = effective_model_visibility(plan)
+    if not visibility:
         return dict(record), {"instruction": False, "context": False}
 
     sanitized = dict(record)
@@ -177,10 +285,11 @@ def sanitize_records_for_model_visibility(
     records: list[dict[str, Any]],
     plan: Mapping[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    visibility = plan.get("model_visibility") or {}
-    if not isinstance(visibility, Mapping) or not visibility:
+    visibility, mode = effective_model_visibility(plan)
+    if not visibility:
         return list(records), {
             "enabled": False,
+            "mode": mode,
             "instruction_modified": 0,
             "context_modified": 0,
             "records_modified": 0,
@@ -203,6 +312,7 @@ def sanitize_records_for_model_visibility(
 
     return sanitized_records, {
         "enabled": True,
+        "mode": mode,
         "instruction_modified": instruction_modified,
         "context_modified": context_modified,
         "records_modified": records_modified,
