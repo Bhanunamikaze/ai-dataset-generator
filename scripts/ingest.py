@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -87,9 +88,120 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _normalize_spaces(value: str) -> str:
+    return re.sub(r"\s+", " ", value.strip())
+
+
+def _language_display_name(language: str) -> str:
+    mapping = {
+        "c": "C",
+        "cpp": "C++",
+        "c_cpp": "C++",
+        "assembly": "assembly",
+        "python": "Python",
+        "powershell": "PowerShell",
+        "bash": "Bash",
+        "html": "HTML",
+        "json": "JSON",
+        "yaml": "YAML",
+        "sql": "SQL",
+    }
+    return mapping.get(language, language or "code")
+
+
+def _is_code_snippet_language(language: str) -> bool:
+    return language in {
+        "c", "cpp", "c_cpp", "assembly", "python", "powershell", "bash",
+        "html", "json", "yaml", "sql", "javascript", "typescript",
+    }
+
+
+def _extract_code_subject(snippet: str, language: str) -> str:
+    language_label = _language_display_name(language)
+    function_match = re.search(
+        r"^\s*(?:[A-Za-z_][\w\s\*\:&<>\[\]]*\s+)?([A-Za-z_~]\w*)\s*\([^;]*\)\s*\{",
+        snippet,
+        re.MULTILINE,
+    )
+    if function_match and function_match.group(1).lower() not in {"if", "for", "while", "switch", "return"}:
+        return f"{language_label} function `{function_match.group(1)}`"
+
+    procedure_match = re.search(r"^\s*([A-Za-z_@?][\w@$?]*)\s+PROC\b", snippet, re.IGNORECASE | re.MULTILINE)
+    if procedure_match:
+        return f"{language_label} procedure `{procedure_match.group(1)}`"
+
+    struct_match = re.search(r"^\s*typedef\s+struct\s+([A-Za-z_]\w+)?", snippet, re.IGNORECASE | re.MULTILINE)
+    if struct_match:
+        struct_name = struct_match.group(1)
+        if struct_name:
+            return f"{language_label} struct definition `{struct_name}`"
+        return f"{language_label} struct definition"
+
+    class_match = re.search(r"^\s*(?:class|struct|enum(?:\s+class)?)\s+([A-Za-z_]\w*)", snippet, re.MULTILINE)
+    if class_match:
+        return f"{language_label} type definition `{class_match.group(1)}`"
+
+    api_call_match = re.search(r"^\s*[A-Za-z_]\w*\s*=\s*[A-Za-z_]\w+\(", snippet, re.MULTILINE)
+    if api_call_match:
+        return f"{language_label} API call snippet"
+
+    return f"{language_label} code snippet"
+
+
+def _is_article_code_bundle(bundle: dict[str, Any]) -> bool:
+    metadata = dict(bundle.get("metadata") or {})
+    if str(bundle.get("kind") or "") != "article_snippet_context":
+        return False
+    snippet_language = str(metadata.get("snippet_language") or bundle.get("language") or "")
+    snippet_text = str(metadata.get("snippet_text") or "")
+    return bool(snippet_text.strip()) and _is_code_snippet_language(snippet_language)
+
+
+def _article_code_instruction(bundle: dict[str, Any]) -> str:
+    metadata = dict(bundle.get("metadata") or {})
+    snippet_text = str(metadata.get("snippet_text") or "")
+    heading = str(metadata.get("heading") or metadata.get("document_title") or bundle.get("title") or "").strip()
+    snippet_language = str(metadata.get("snippet_language") or bundle.get("language") or "")
+    subject = _extract_code_subject(snippet_text, snippet_language)
+    if heading:
+        return (
+            f"Write the {subject} from the '{heading}' section. "
+            "Use the provided article context to match the same behavior, API usage, and structure."
+        )
+    return (
+        f"Write the {subject} shown in the reference. "
+        "Use the provided article context to match the same behavior, API usage, and structure."
+    )
+
+
+def _article_code_context(bundle: dict[str, Any]) -> str:
+    metadata = dict(bundle.get("metadata") or {})
+    document_title = str(metadata.get("document_title") or bundle.get("title") or "")
+    heading = str(metadata.get("heading") or "")
+    declared_language = str(metadata.get("declared_language") or "")
+    snippet_language = str(metadata.get("snippet_language") or bundle.get("language") or "")
+    before_context = [_normalize_spaces(str(item)) for item in metadata.get("before_context") or [] if str(item).strip()]
+    after_context = [_normalize_spaces(str(item)) for item in metadata.get("after_context") or [] if str(item).strip()]
+
+    sections = []
+    if document_title:
+        sections.append(f"Document Title: {document_title}")
+    if heading:
+        sections.append(f"Section Heading: {heading}")
+    if declared_language and declared_language != snippet_language:
+        sections.append(f"Original Fence Language: {declared_language}")
+    if before_context:
+        sections.append("Reference Context Before:\n" + "\n".join(before_context))
+    if after_context:
+        sections.append("Reference Context After:\n" + "\n".join(after_context))
+    return "\n\n".join(section for section in sections if section.strip())
+
+
 def _bundle_instruction(bundle: dict[str, Any]) -> str:
     kind = str(bundle.get("kind") or "")
     metadata = dict(bundle.get("metadata") or {})
+    if _is_article_code_bundle(bundle):
+        return _article_code_instruction(bundle)
     if kind == "c_family_context":
         primary_file = metadata.get("primary_file") or bundle.get("source_path")
         return (
@@ -108,9 +220,17 @@ def _bundle_instruction(bundle: dict[str, Any]) -> str:
     )
 
 
+def _bundle_context(bundle: dict[str, Any]) -> str:
+    if _is_article_code_bundle(bundle):
+        return _article_code_context(bundle)
+    return str(bundle.get("content") or "")
+
+
 def _bundle_response(bundle: dict[str, Any]) -> str:
     metadata = dict(bundle.get("metadata") or {})
     kind = str(bundle.get("kind") or "")
+    if _is_article_code_bundle(bundle):
+        return str(metadata.get("snippet_text") or "")
     lines: list[str] = []
     if kind == "c_family_context":
         lines.append(f"Primary file: {metadata.get('primary_file') or bundle.get('source_path')}")
@@ -163,8 +283,13 @@ def build_drafts_from_bundles(
     drafts: list[dict[str, Any]] = []
     for bundle in bundles:
         instruction = _bundle_instruction(bundle)
-        context = str(bundle.get("content") or "")
+        context = _bundle_context(bundle)
         response_text = _bundle_response(bundle)
+        bundle_metadata = dict(bundle.get("metadata") or {})
+        is_article_code = _is_article_code_bundle(bundle)
+        tags = ["structured_ingest"]
+        if is_article_code:
+            tags.append("code_example")
         draft = {
             "id": build_record_id(
                 {
@@ -183,14 +308,19 @@ def build_drafts_from_bundles(
             },
             "metadata": {
                 "difficulty": "medium",
-                "persona": "source_analyst",
+                "persona": "implementation_assistant" if is_article_code else "source_analyst",
                 "source_type": "structured_source",
                 "source_origin": "real_world",
                 "bundle_id": bundle["id"],
                 "bundle_kind": bundle.get("kind"),
                 "bundle_title": bundle.get("title"),
+                "task_family": "code_generation" if is_article_code else "source_grounded_explanation",
+                "snippet_language": bundle_metadata.get("snippet_language"),
+                "declared_language": bundle_metadata.get("declared_language"),
+                "document_title": bundle_metadata.get("document_title"),
+                "section_title": bundle_metadata.get("heading"),
                 "related_paths": bundle.get("related_paths") or [],
-                "tags": ["structured_ingest"],
+                "tags": tags,
             },
             "pipeline_status": "pending",
             "status": "raw_generated",

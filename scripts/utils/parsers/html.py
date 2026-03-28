@@ -21,16 +21,195 @@ def _truncate(value: str, limit: int) -> str:
     return text[: max(0, limit - 17)].rstrip() + "\n...[truncated]"
 
 
-def _infer_snippet_language(class_names: list[str], snippet: str) -> str:
-    combined = " ".join(class_names).lower()
+def _normalize_language_hint(value: str) -> str:
+    candidate = value.strip().lower()
+    if not candidate:
+        return ""
+    if candidate.startswith("language-"):
+        candidate = candidate[len("language-"):]
+    if candidate.startswith("lang-"):
+        candidate = candidate[len("lang-"):]
+    aliases = {
+        "c++": "cpp",
+        "cc": "cpp",
+        "cxx": "cpp",
+        "shell": "bash",
+        "sh": "bash",
+        "ps1": "powershell",
+        "cmd": "batch",
+        "asmx": "assembly",
+        "asm": "assembly",
+        "yml": "yaml",
+    }
+    return aliases.get(candidate, candidate)
+
+
+def _declared_language_from_class_names(class_names: list[str]) -> str:
+    for name in class_names:
+        normalized = _normalize_language_hint(name)
+        if normalized:
+            return normalized
+    return ""
+
+
+def _looks_like_cpp(snippet: str) -> bool:
     snippet_lower = snippet.lower()
-    if any(token in combined for token in ("cpp", "c++", "language-cpp", "language-c")):
-        return "c_cpp"
-    if "#include" in snippet_lower or "std::" in snippet_lower or "printf(" in snippet_lower:
-        return "c_cpp"
+    cpp_markers = (
+        "bool ",
+        "dword",
+        "handle",
+        "lpwstr",
+        "lpvoid",
+        "processentry32",
+        "wchar",
+        "create toolhelp32snapshot".replace(" ", ""),
+        "createtoolhelp32snapshot",
+        "process32first",
+        "process32next",
+        "openprocess(",
+        "virtualallocex(",
+        "writeprocessmemory(",
+        "createremotethread(",
+        "loadlibraryw",
+        "getprocaddress(",
+        "getmodulehandle(",
+        "rtlsecurezeromemory(",
+        "wcscmp(",
+        "getlasterror(",
+        "#include <windows.h>",
+        "#include <tlhelp32.h>",
+        "typedef struct",
+        "std::",
+    )
+    if any(token in snippet_lower for token in cpp_markers):
+        return True
+    if re.search(
+        r"^\s*(?:bool|void|int|char|wchar_t|handle|dword|size_t|processentry32|lpwstr|lpvoid|wchar)\s+"
+        r"[A-Za-z_~]\w*\s*\([^;]*\)\s*\{",
+        snippet,
+        re.IGNORECASE | re.MULTILINE,
+    ):
+        return True
+    if re.search(r"^\s*typedef\s+struct\b", snippet, re.IGNORECASE | re.MULTILINE):
+        return True
+    if re.search(r"^\s*[A-Za-z_]\w*\s*=\s*[A-Za-z_]\w+\(", snippet, re.MULTILINE):
+        return True
+    return False
+
+
+def _looks_like_assembly(snippet: str) -> bool:
+    snippet_lower = snippet.lower()
+    if re.search(r"^\s*[a-z_@?][\w@$?]*\s+proc\b", snippet, re.IGNORECASE | re.MULTILINE):
+        return True
+    return any(token in snippet_lower for token in (" endp", "include ", "includelib ", " mov ", " xor ", "ret"))
+
+
+def _looks_like_python(snippet: str) -> bool:
+    return bool(
+        re.search(r"^\s*(def|class)\s+[A-Za-z_]\w*\s*[:(]", snippet, re.MULTILINE)
+        or "import " in snippet
+    )
+
+
+def _looks_like_powershell(snippet: str) -> bool:
+    snippet_lower = snippet.lower()
+    return bool(
+        re.search(r"^\s*function\s+[A-Za-z_][\w-]*\s*\{", snippet, re.IGNORECASE | re.MULTILINE)
+        or "$null" in snippet_lower
+        or "write-host" in snippet_lower
+    )
+
+
+def _looks_like_bash(snippet: str) -> bool:
+    snippet_lower = snippet.lower()
+    return bool(
+        snippet_lower.startswith("#!/bin/bash")
+        or re.search(r"^\s*[A-Za-z_]\w*\(\)\s*\{", snippet, re.MULTILINE)
+        or "echo " in snippet_lower
+        or "fi\n" in snippet_lower
+    )
+
+
+def _looks_like_json(snippet: str) -> bool:
+    stripped = snippet.strip()
+    return (
+        (stripped.startswith("{") and stripped.endswith("}"))
+        or (stripped.startswith("[") and stripped.endswith("]"))
+    )
+
+
+def _infer_snippet_language(class_names: list[str], snippet: str, declared_language: str = "") -> str:
+    declared = _normalize_language_hint(declared_language or _declared_language_from_class_names(class_names))
+    snippet_lower = snippet.lower()
+    if _looks_like_cpp(snippet):
+        return "cpp"
+    if _looks_like_assembly(snippet):
+        return "assembly"
+    if _looks_like_python(snippet):
+        return "python"
+    if _looks_like_powershell(snippet):
+        return "powershell"
+    if _looks_like_json(snippet):
+        return "json"
     if "<html" in snippet_lower or "</div>" in snippet_lower:
         return "html"
+    if declared:
+        if declared == "c":
+            return "cpp"
+        return declared
+    if _looks_like_bash(snippet):
+        return "bash"
     return "unknown"
+
+
+def _looks_like_source_block(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    return (
+        _looks_like_cpp(stripped)
+        or _looks_like_assembly(stripped)
+        or _looks_like_python(stripped)
+        or _looks_like_powershell(stripped)
+        or _looks_like_json(stripped)
+        or stripped.count(";") >= 2
+        or ("{" in stripped and "}" in stripped)
+    )
+
+
+def _clean_markdown_context_block(block: str) -> str:
+    raw_lines = [line.strip() for line in block.splitlines() if line.strip()]
+    if raw_lines and all(line.startswith("#") for line in raw_lines):
+        return ""
+    lines: list[str] = []
+    for raw_line in block.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("```"):
+            continue
+        line = re.sub(r"^#{1,6}\s+", "", line)
+        lines.append(line)
+    text = re.sub(r"\s+", " ", " ".join(lines)).strip()
+    if _looks_like_source_block(text):
+        return ""
+    return text
+
+
+def _extract_markdown_context_blocks(content: str, start: int, end: int) -> tuple[list[str], list[str]]:
+    before_chunks = [
+        cleaned for cleaned in (
+            _clean_markdown_context_block(block)
+            for block in re.split(r"\n\s*\n", content[:start])
+        )
+        if cleaned
+    ]
+    after_chunks = [
+        cleaned for cleaned in (
+            _clean_markdown_context_block(block)
+            for block in re.split(r"\n\s*\n", content[end:])
+        )
+        if cleaned
+    ]
+    return before_chunks[-2:], after_chunks[:2]
 
 
 def _decode_mhtml(path: str) -> tuple[str, str]:
@@ -123,7 +302,8 @@ def _html_snippet_bundles(
             if item.get_text(" ", strip=True)
         ]
         class_names = list(node.get("class") or [])
-        snippet_language = _infer_snippet_language(class_names, snippet_text)
+        declared_language = _declared_language_from_class_names(class_names)
+        snippet_language = _infer_snippet_language(class_names, snippet_text, declared_language)
 
         units.append(
             build_unit(
@@ -138,6 +318,7 @@ def _html_snippet_bundles(
                     "snippet_index": index,
                     "file_id": file_record["id"],
                     "class_names": class_names,
+                    "declared_language": declared_language,
                 },
                 stable_payload={
                     "source_path": str(file_record["source_path"]),
@@ -184,8 +365,10 @@ def _html_snippet_bundles(
                     "heading": heading_node.get_text(" ", strip=True) if heading_node else "",
                     "snippet_index": index,
                     "snippet_language": snippet_language,
+                    "declared_language": declared_language,
                     "before_context": previous_blocks,
                     "after_context": next_blocks,
+                    "snippet_text": snippet_text,
                 },
                 stable_payload={
                     "source_path": str(file_record["source_path"]),
@@ -247,9 +430,9 @@ def _markdown_or_text_bundles(
             else:
                 break
         code = match.group("code").strip()
-        lang = match.group("lang").strip() or _infer_snippet_language([], code)
-        before = _truncate(content[max(0, match.start() - 300):match.start()], 300)
-        after = _truncate(content[match.end():match.end() + 300], 300)
+        declared_language = match.group("lang").strip()
+        lang = _infer_snippet_language([], code, declared_language)
+        before_blocks, after_blocks = _extract_markdown_context_blocks(content, match.start(), match.end())
         units.append(
             build_unit(
                 kind="article_code_snippet",
@@ -262,6 +445,7 @@ def _markdown_or_text_bundles(
                     "document_title": title,
                     "snippet_index": index,
                     "file_id": file_record["id"],
+                    "declared_language": _normalize_language_hint(declared_language),
                 },
                 stable_payload={
                     "source_path": str(file_record["source_path"]),
@@ -285,9 +469,9 @@ def _markdown_or_text_bundles(
             section for section in [
                 f"Document Title: {title}",
                 f"Section Heading: {heading}",
-                "Before:\n" + before if before.strip() else "",
+                "Before:\n" + "\n".join(before_blocks) if before_blocks else "",
                 "Code Snippet:\n" + code,
-                "After:\n" + after if after.strip() else "",
+                "After:\n" + "\n".join(after_blocks) if after_blocks else "",
             ]
             if section.strip()
         )
@@ -304,6 +488,10 @@ def _markdown_or_text_bundles(
                     "heading": heading,
                     "snippet_index": index,
                     "snippet_language": lang,
+                    "declared_language": _normalize_language_hint(declared_language),
+                    "before_context": before_blocks,
+                    "after_context": after_blocks,
+                    "snippet_text": code,
                 },
                 stable_payload={
                     "source_path": str(file_record["source_path"]),

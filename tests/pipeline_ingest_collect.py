@@ -427,7 +427,88 @@ class CollectorTests(unittest.TestCase):
         self.assertIn("Compile the example", bundle["content"])
         self.assertIn("This program returns success", bundle["content"])
         self.assertEqual(bundle["metadata"]["heading"], "Setup")
-        self.assertEqual(bundle["metadata"]["snippet_language"], "c_cpp")
+        self.assertEqual(bundle["metadata"]["snippet_language"], "cpp")
+
+    def test_markdown_parser_infers_cpp_from_bash_fence_using_code_body(self) -> None:
+        from scripts.utils.discovery import discover_source_files
+        from scripts.utils.parsers.html import parse_article_corpus
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_dir = Path(tmpdir)
+            markdown_path = temp_dir / "dll_injection.md"
+            markdown_path.write_text(
+                "## Case Sensitive Process Name\n\n"
+                "The code snippet below fixes this issue by converting the value in the "
+                "`Proc.szExeFile` member to a lowercase string and then comparing it to "
+                "`szProcessName`.\n\n"
+                "```bash\n"
+                "BOOL GetRemoteProcessHandle(LPWSTR szProcessName, DWORD* dwProcessId, HANDLE* hProcess) {\n"
+                "\tif (wcscmp(L\"explorer.exe\", szProcessName) == 0) {\n"
+                "\t\t*dwProcessId = 1234;\n"
+                "\t\treturn TRUE;\n"
+                "\t}\n"
+                "\treturn FALSE;\n"
+                "}\n"
+                "```\n\n"
+                "Therefore, `szProcessName` must always be passed in as a lowercase string.\n",
+                encoding="utf-8",
+            )
+
+            discovered = discover_source_files([str(markdown_path)], max_files=10)
+            parsed = parse_article_corpus(discovered["files"], bundle_max_chars=4000)
+
+        self.assertEqual(len(parsed["bundles"]), 1)
+        bundle = parsed["bundles"][0]
+        self.assertEqual(bundle["metadata"]["snippet_language"], "cpp")
+        self.assertEqual(bundle["metadata"]["declared_language"], "bash")
+        self.assertIn("BOOL GetRemoteProcessHandle", bundle["metadata"]["snippet_text"])
+        self.assertTrue(bundle["metadata"]["before_context"])
+        self.assertIn("lowercase string", bundle["metadata"]["before_context"][0])
+
+    def test_build_drafts_from_article_code_bundle_keeps_exact_code_and_context(self) -> None:
+        from scripts.ingest import build_drafts_from_bundles
+        from scripts.utils.discovery import discover_source_files
+        from scripts.utils.parsers.html import parse_article_corpus
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_dir = Path(tmpdir)
+            markdown_path = temp_dir / "dll_injection.md"
+            markdown_path.write_text(
+                "# Process Injection - DLL Injection\n\n"
+                "## Case Sensitive Process Name\n\n"
+                "The code snippet below fixes this issue by converting the value in the "
+                "`Proc.szExeFile` member to a lowercase string and then comparing it to "
+                "`szProcessName`.\n\n"
+                "```bash\n"
+                "BOOL GetRemoteProcessHandle(LPWSTR szProcessName, DWORD* dwProcessId, HANDLE* hProcess) {\n"
+                "\tWCHAR LowerName[MAX_PATH * 2];\n"
+                "\tif (wcscmp(LowerName, szProcessName) == 0) {\n"
+                "\t\t*dwProcessId = Proc.th32ProcessID;\n"
+                "\t\t*hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, Proc.th32ProcessID);\n"
+                "\t\treturn TRUE;\n"
+                "\t}\n"
+                "\treturn FALSE;\n"
+                "}\n"
+                "```\n\n"
+                "Therefore, `szProcessName` must always be passed in as a lowercase string.\n",
+                encoding="utf-8",
+            )
+
+            discovered = discover_source_files([str(markdown_path)], max_files=10)
+            parsed = parse_article_corpus(discovered["files"], bundle_max_chars=4000)
+            drafts = build_drafts_from_bundles(parsed["bundles"], task_type="sft")
+
+        self.assertEqual(len(drafts), 1)
+        draft = drafts[0]
+        self.assertEqual(draft["source_type"], "structured_source")
+        self.assertEqual(draft["metadata"]["task_family"], "code_generation")
+        self.assertEqual(draft["metadata"]["snippet_language"], "cpp")
+        self.assertIn("Write the C++ function `GetRemoteProcessHandle`", draft["instruction"])
+        self.assertIn("Case Sensitive Process Name", draft["context"])
+        self.assertIn("lowercase string", draft["context"])
+        self.assertNotIn("BOOL GetRemoteProcessHandle", draft["context"])
+        self.assertIn("BOOL GetRemoteProcessHandle", draft["response"]["text"])
+        self.assertIn("OpenProcess(PROCESS_ALL_ACCESS", draft["response"]["text"])
 
     def test_ingest_script_writes_artifacts_and_imports_structured_drafts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -484,5 +565,4 @@ class CollectorTests(unittest.TestCase):
             self.assertGreaterEqual(rows[0], 2)
             self.assertEqual(rows[1], "structured_source")
             self.assertEqual(rows[2], "structured_source")
-
 
