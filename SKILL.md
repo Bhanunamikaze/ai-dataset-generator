@@ -55,7 +55,7 @@ Behavior:
 
 - discovers supported local source files
 - preserves hashes, provenance, and relative paths
-- parses C/C++ source, header, and assembly files together
+- prefers tree-sitter-backed parsing for C/C++ source, header, and assembly files, with deterministic heuristic fallback
 - parses Visual Studio `.sln`, `.vcxproj`, and `.vcxproj.filters` structure without compiling
 - extracts code snippets and surrounding context from `html`, `htm`, `mhtml`, `md`, and `txt`
 - writes parsed artifacts under `workspace/ingest_runs/<run_id>/`

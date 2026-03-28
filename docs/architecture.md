@@ -67,6 +67,7 @@ Responsibilities:
 
 - normalize/import canonical records
 - discover and parse structured local source material into files, units, relations, bundles, and canonical drafts
+- prefer tree-sitter-backed C/C++ and assembly parsing with deterministic fallback
 - orchestrate batch-wise quality loops across generate -> verify -> dedup -> coverage -> export
 - measure effective post-dedup count, bucket gaps, joint-bucket skew, provenance, response-length drift, response-structure collapse, response-prefix repetition, and metadata completeness during generation
 - manage resumable SQLite state

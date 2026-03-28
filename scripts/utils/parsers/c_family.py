@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib
 import re
 import xml.etree.ElementTree as ET
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,26 @@ _ASM_LABEL_PATTERN = re.compile(r'^\s*([A-Za-z_@?][\w@$?]*)\s*:\s*(?:;.*)?$', re
 _ASM_INCLUDE_PATTERN = re.compile(r'^\s*(?:INCLUDE|INCLUDELIB)\s+([^\s;]+)', re.MULTILINE | re.IGNORECASE)
 _PROJECT_MEMBER_TAGS = {
     "ClCompile", "ClInclude", "None", "Text", "MASM", "CustomBuild", "CustomBuildStep"
+}
+_CPP_EXTENSIONS = {".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx", ".inl"}
+_CPP_HEADER_HINTS = (
+    "namespace ",
+    "class ",
+    "template<",
+    "template <",
+    "typename ",
+    "public:",
+    "private:",
+    "protected:",
+    "constexpr ",
+    "consteval ",
+    "::",
+)
+_TYPE_SPECIFIER_KINDS = {
+    "class_specifier": "class",
+    "struct_specifier": "struct",
+    "union_specifier": "union",
+    "enum_specifier": "enum",
 }
 
 
@@ -60,36 +82,150 @@ def _find_block_end(text: str, start_offset: int) -> int:
     return min(len(text), start_offset + 1200)
 
 
-def _extract_symbols(file_record: dict[str, Any]) -> list[dict[str, Any]]:
+@lru_cache(maxsize=1)
+def _load_tree_sitter_language_pack() -> Any | None:
+    try:
+        return importlib.import_module("tree_sitter_language_pack")
+    except Exception:
+        return None
+
+
+@lru_cache(maxsize=4)
+def _get_tree_sitter_parser(language_name: str) -> Any | None:
+    module = _load_tree_sitter_language_pack()
+    if module is None:
+        return None
+    try:
+        return module.get_parser(language_name)
+    except Exception:
+        return None
+
+
+def _node_text(content_bytes: bytes, node: Any | None) -> str:
+    if node is None:
+        return ""
+    return content_bytes[node.start_byte:node.end_byte].decode("utf-8", errors="ignore")
+
+
+def _iter_nodes(node: Any) -> Any:
+    yield node
+    for child in node.children:
+        yield from _iter_nodes(child)
+
+
+def _unwrap_named_declarator(node: Any | None) -> Any | None:
+    current = node
+    while current is not None:
+        next_node = current.child_by_field_name("declarator")
+        if next_node is None:
+            return current
+        current = next_node
+    return None
+
+
+def _find_descendant_by_type(node: Any | None, node_types: set[str]) -> Any | None:
+    if node is None:
+        return None
+    if node.type in node_types:
+        return node
+    for child in node.children:
+        found = _find_descendant_by_type(child, node_types)
+        if found is not None:
+            return found
+    return None
+
+
+def _infer_tree_sitter_language(file_record: dict[str, Any]) -> str | None:
+    kind = str(file_record.get("kind") or "")
+    if kind in {"assembly_source", "assembly_include"}:
+        return "asm"
+
+    extension = str(file_record.get("metadata", {}).get("extension") or Path(str(file_record["source_path"])).suffix.lower())
+    if extension == ".c":
+        return "c"
+    if extension in _CPP_EXTENSIONS:
+        return "cpp"
+    if extension != ".h":
+        return "c"
+
+    content = str(file_record.get("content") or "")
+    if any(marker in content for marker in _CPP_HEADER_HINTS):
+        return "cpp"
+    return "c"
+
+
+def _qualify_symbol_name(node: Any, symbol_name: str, content_bytes: bytes) -> str:
+    parts = [symbol_name]
+    current = getattr(node, "parent", None)
+    while current is not None:
+        if current.type == "namespace_definition":
+            namespace_name = _node_text(content_bytes, current.child_by_field_name("name")).strip()
+            if namespace_name:
+                parts.append(namespace_name)
+        elif current.type in _TYPE_SPECIFIER_KINDS:
+            type_name = _node_text(content_bytes, current.child_by_field_name("name")).strip()
+            if type_name:
+                parts.append(type_name)
+        current = getattr(current, "parent", None)
+    return "::".join(reversed(parts))
+
+
+def _build_symbol_unit(
+    *,
+    family: str,
+    symbol_kind: str,
+    source_path: str,
+    language: str,
+    content: str,
+    symbol_name: str,
+    start: int,
+    end: int,
+    parser_mode: str,
+    file_id: str,
+) -> dict[str, Any]:
+    return build_unit(
+        kind=f"{family}_{symbol_kind}",
+        source_path=source_path,
+        title=symbol_name,
+        language=language,
+        content=_truncate(content[start:end].strip(), 1200),
+        metadata={
+            "symbol_kind": symbol_kind,
+            "symbol_name": symbol_name,
+            "line_start": _line_number(content, start),
+            "line_end": _line_number(content, end),
+            "parser_mode": parser_mode,
+            "file_id": file_id,
+        },
+        stable_payload={
+            "source_path": source_path,
+            "kind": symbol_kind,
+            "name": symbol_name,
+            "start": start,
+            "end": end,
+        },
+    )
+
+
+def _extract_symbols_heuristic(file_record: dict[str, Any]) -> list[dict[str, Any]]:
     content = str(file_record.get("content") or "")
     source_path = str(file_record["source_path"])
     language = str(file_record.get("language") or "c_cpp")
     symbols: list[dict[str, Any]] = []
 
     def add_symbol(kind: str, name: str, start: int, end: int) -> None:
-        snippet = content[start:end].strip()
         symbols.append(
-            build_unit(
-                kind=f"c_family_{kind}",
+            _build_symbol_unit(
+                family="c_family",
+                symbol_kind=kind,
                 source_path=source_path,
-                title=name,
                 language=language,
-                content=_truncate(snippet, 1200),
-                metadata={
-                    "symbol_kind": kind,
-                    "symbol_name": name,
-                    "line_start": _line_number(content, start),
-                    "line_end": _line_number(content, end),
-                    "parser_mode": "heuristic",
-                    "file_id": file_record["id"],
-                },
-                stable_payload={
-                    "source_path": source_path,
-                    "kind": kind,
-                    "name": name,
-                    "start": start,
-                    "end": end,
-                },
+                content=content,
+                symbol_name=name,
+                start=start,
+                end=end,
+                parser_mode="heuristic",
+                file_id=str(file_record["id"]),
             )
         )
 
@@ -106,34 +242,119 @@ def _extract_symbols(file_record: dict[str, Any]) -> list[dict[str, Any]]:
     return symbols
 
 
-def _extract_assembly_symbols(file_record: dict[str, Any]) -> list[dict[str, Any]]:
+def _extract_tree_sitter_symbols(file_record: dict[str, Any]) -> tuple[list[dict[str, Any]] | None, list[str]]:
+    language_name = _infer_tree_sitter_language(file_record)
+    if language_name is None:
+        return None, []
+
+    parser = _get_tree_sitter_parser(language_name)
+    if parser is None:
+        return None, []
+
+    content = str(file_record.get("content") or "")
+    source_path = str(file_record["source_path"])
+    content_bytes = content.encode("utf-8")
+
+    try:
+        tree = parser.parse(content_bytes)
+    except Exception as exc:
+        return None, [f"Tree-sitter parsing failed for {source_path}: {exc}"]
+
+    if language_name == "asm":
+        return _extract_tree_sitter_assembly_symbols(file_record, tree.root_node, content, content_bytes), []
+    return _extract_tree_sitter_c_cpp_symbols(
+        file_record,
+        language_name=language_name,
+        root_node=tree.root_node,
+        content=content,
+        content_bytes=content_bytes,
+    ), []
+
+
+def _extract_tree_sitter_c_cpp_symbols(
+    file_record: dict[str, Any],
+    *,
+    language_name: str,
+    root_node: Any,
+    content: str,
+    content_bytes: bytes,
+) -> list[dict[str, Any]]:
+    source_path = str(file_record["source_path"])
+    symbols: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, int, int]] = set()
+
+    def add_symbol(kind: str, name: str, node: Any, start: int | None = None, end: int | None = None) -> None:
+        raw_name = name.strip()
+        if not raw_name:
+            return
+        qualified_name = _qualify_symbol_name(node, raw_name, content_bytes)
+        start_offset = node.start_byte if start is None else start
+        end_offset = node.end_byte if end is None else end
+        symbol_key = (kind, qualified_name, start_offset, end_offset)
+        if symbol_key in seen:
+            return
+        seen.add(symbol_key)
+        symbols.append(
+            _build_symbol_unit(
+                family="c_family",
+                symbol_kind=kind,
+                source_path=source_path,
+                language="assembly" if language_name == "asm" else "c_cpp",
+                content=content,
+                symbol_name=qualified_name,
+                start=start_offset,
+                end=end_offset,
+                parser_mode="tree_sitter",
+                file_id=str(file_record["id"]),
+            )
+        )
+
+    for node in _iter_nodes(root_node):
+        if node.type == "namespace_definition":
+            add_symbol("namespace", _node_text(content_bytes, node.child_by_field_name("name")), node)
+            continue
+        if node.type in _TYPE_SPECIFIER_KINDS:
+            add_symbol(_TYPE_SPECIFIER_KINDS[node.type], _node_text(content_bytes, node.child_by_field_name("name")), node)
+            continue
+        if node.type in {"preproc_def", "preproc_function_def"}:
+            add_symbol("macro", _node_text(content_bytes, node.child_by_field_name("name")), node)
+            continue
+        if node.type in {"type_definition", "alias_declaration"}:
+            declarator_node = _unwrap_named_declarator(
+                node.child_by_field_name("declarator") or node.child_by_field_name("name")
+            )
+            add_symbol("typedef", _node_text(content_bytes, declarator_node), node)
+            continue
+        if node.type == "function_definition":
+            declarator_node = _unwrap_named_declarator(node.child_by_field_name("declarator"))
+            add_symbol("function", _node_text(content_bytes, declarator_node), node)
+            continue
+        if node.type == "declaration":
+            function_declarator = _find_descendant_by_type(node, {"function_declarator"})
+            declarator_node = _unwrap_named_declarator(function_declarator)
+            if declarator_node is not None:
+                add_symbol("function", _node_text(content_bytes, declarator_node), node)
+    return symbols
+
+
+def _extract_assembly_symbols_heuristic(file_record: dict[str, Any]) -> list[dict[str, Any]]:
     content = str(file_record.get("content") or "")
     source_path = str(file_record["source_path"])
     symbols: list[dict[str, Any]] = []
 
     def add_symbol(kind: str, name: str, start: int, end: int) -> None:
         symbols.append(
-            build_unit(
-                kind=f"assembly_{kind}",
+            _build_symbol_unit(
+                family="assembly",
+                symbol_kind=kind,
                 source_path=source_path,
-                title=name,
                 language="assembly",
-                content=_truncate(content[start:end].strip(), 1200),
-                metadata={
-                    "symbol_kind": kind,
-                    "symbol_name": name,
-                    "line_start": _line_number(content, start),
-                    "line_end": _line_number(content, end),
-                    "parser_mode": "heuristic",
-                    "file_id": file_record["id"],
-                },
-                stable_payload={
-                    "source_path": source_path,
-                    "kind": kind,
-                    "name": name,
-                    "start": start,
-                    "end": end,
-                },
+                content=content,
+                symbol_name=name,
+                start=start,
+                end=end,
+                parser_mode="heuristic",
+                file_id=str(file_record["id"]),
             )
         )
 
@@ -153,6 +374,75 @@ def _extract_assembly_symbols(file_record: dict[str, Any]) -> list[dict[str, Any
             continue
         add_symbol("label", label, match.start(), min(len(content), match.end() + 200))
     return symbols
+
+
+def _extract_tree_sitter_assembly_symbols(
+    file_record: dict[str, Any],
+    root_node: Any,
+    content: str,
+    content_bytes: bytes,
+) -> list[dict[str, Any]]:
+    source_path = str(file_record["source_path"])
+    symbols: list[dict[str, Any]] = []
+    seen_labels: set[str] = set()
+    open_procs: dict[str, tuple[str, int]] = {}
+
+    def add_symbol(kind: str, name: str, start: int, end: int) -> None:
+        if not name.strip():
+            return
+        symbols.append(
+            _build_symbol_unit(
+                family="assembly",
+                symbol_kind=kind,
+                source_path=source_path,
+                language="assembly",
+                content=content,
+                symbol_name=name.strip(),
+                start=start,
+                end=end,
+                parser_mode="tree_sitter",
+                file_id=str(file_record["id"]),
+            )
+        )
+
+    for node in root_node.children:
+        if not getattr(node, "is_named", False):
+            continue
+        if node.type == "instruction":
+            tokens = [
+                _node_text(content_bytes, child).strip()
+                for child in node.children
+                if getattr(child, "is_named", False) and _node_text(content_bytes, child).strip()
+            ]
+            if len(tokens) >= 2 and tokens[1].upper() == "PROC":
+                open_procs[tokens[0].lower()] = (tokens[0], node.start_byte)
+            elif len(tokens) >= 2 and tokens[1].upper() == "ENDP":
+                proc_name = tokens[0]
+                _, start_offset = open_procs.pop(proc_name.lower(), (proc_name, node.start_byte))
+                add_symbol("proc", proc_name, start_offset, node.end_byte)
+                seen_labels.add(proc_name.lower())
+            continue
+        if node.type == "label":
+            label_name = _node_text(content_bytes, node.child_by_field_name("name"))
+            if not label_name:
+                named_children = [child for child in node.children if getattr(child, "is_named", False)]
+                label_name = _node_text(content_bytes, named_children[0] if named_children else None)
+            if label_name and label_name.lower() not in seen_labels:
+                add_symbol("label", label_name, node.start_byte, node.end_byte)
+                seen_labels.add(label_name.lower())
+
+    for _, (proc_name, start_offset) in open_procs.items():
+        add_symbol("proc", proc_name, start_offset, min(len(content), start_offset + 600))
+    return symbols
+
+
+def _extract_symbols(file_record: dict[str, Any]) -> tuple[list[dict[str, Any]], str, list[str]]:
+    tree_sitter_symbols, warnings = _extract_tree_sitter_symbols(file_record)
+    if tree_sitter_symbols is not None:
+        return tree_sitter_symbols, "tree_sitter", warnings
+    if str(file_record.get("kind")) in {"assembly_source", "assembly_include"}:
+        return _extract_assembly_symbols_heuristic(file_record), "heuristic", warnings
+    return _extract_symbols_heuristic(file_record), "heuristic", warnings
 
 
 def _extract_includes(file_record: dict[str, Any]) -> list[dict[str, Any]]:
@@ -372,20 +662,21 @@ def parse_c_family_corpus(
 
     includes_by_path: dict[str, list[dict[str, Any]]] = {}
     symbols_by_path: dict[str, list[dict[str, Any]]] = {}
+    parser_modes_by_path: dict[str, str] = {}
     for item in c_code_files:
-        if str(item["kind"]) in {"assembly_source", "assembly_include"}:
-            symbols = _extract_assembly_symbols(item)
-        else:
-            symbols = _extract_symbols(item)
-        symbols_by_path[str(item["source_path"])] = symbols
+        symbols, parser_mode, parser_warnings = _extract_symbols(item)
+        source_path = str(item["source_path"])
+        symbols_by_path[source_path] = symbols
+        parser_modes_by_path[source_path] = parser_mode
         units.extend(symbols)
+        warnings.extend(parser_warnings)
         includes = _extract_includes(item)
-        includes_by_path[str(item["source_path"])] = includes
+        includes_by_path[source_path] = includes
 
         for include in includes:
             resolved_path = _resolve_include(
                 include["include"],
-                str(item["source_path"]),
+                source_path,
                 files_by_path,
                 files_by_name,
             )
@@ -546,7 +837,11 @@ def parse_c_family_corpus(
                 "symbol_names": sorted(dict.fromkeys(symbol_names)),
                 "include_lines": include_lines[:50],
                 "bundle_type": "code",
-                "parser_mode": "heuristic",
+                "parser_mode": parser_modes_by_path.get(primary_path, "heuristic"),
+                "parser_modes": {
+                    str(item["source_path"]): parser_modes_by_path.get(str(item["source_path"]), "heuristic")
+                    for item in related_files
+                },
                 "filters": {
                     path: project_filters.get(str(Path(project["project_path"])), {}).get(path, "")
                     for path, projects in project_info.items()

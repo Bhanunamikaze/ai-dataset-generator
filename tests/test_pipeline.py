@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import sqlite3
 import subprocess
@@ -2357,6 +2358,87 @@ class CollectorTests(unittest.TestCase):
         relation_kinds = {item["kind"] for item in parsed["relations"]}
         self.assertIn("includes", relation_kinds)
         self.assertIn("project_contains_file", relation_kinds)
+
+    def test_c_family_parser_falls_back_to_heuristics_without_tree_sitter(self) -> None:
+        from scripts.utils.discovery import discover_source_files
+        from scripts.utils.parsers import c_family
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_dir = Path(tmpdir)
+            (temp_dir / "src").mkdir()
+            (temp_dir / "include").mkdir()
+            (temp_dir / "src" / "main.cpp").write_text(
+                '#include "main.hpp"\nnamespace demo { int run() { return 1; } }\n',
+                encoding="utf-8",
+            )
+            (temp_dir / "include" / "main.hpp").write_text(
+                "#define MAX_VALUE 5\nnamespace demo { class Widget {}; }\n",
+                encoding="utf-8",
+            )
+            (temp_dir / "src" / "decoder.asm").write_text(
+                "Decoder PROC\n nop\nDecoder ENDP\nSharedLabel:\n ret\n",
+                encoding="utf-8",
+            )
+
+            discovered = discover_source_files([str(temp_dir)], max_files=20)
+            c_family_files = [
+                item for item in discovered["files"]
+                if item["metadata"]["parser_key"] == "c_family"
+            ]
+            c_family._get_tree_sitter_parser.cache_clear()
+            with patch("scripts.utils.parsers.c_family._load_tree_sitter_language_pack", return_value=None):
+                parsed = c_family.parse_c_family_corpus(c_family_files, bundle_max_chars=6000)
+
+        self.assertGreaterEqual(len(parsed["bundles"]), 1)
+        self.assertTrue(parsed["units"])
+        self.assertTrue(all(item["metadata"]["parser_mode"] == "heuristic" for item in parsed["units"]))
+        self.assertEqual(parsed["bundles"][0]["metadata"]["parser_mode"], "heuristic")
+
+    def test_c_family_parser_uses_tree_sitter_when_available(self) -> None:
+        if importlib.util.find_spec("tree_sitter_language_pack") is None:
+            self.skipTest("tree_sitter_language_pack is not installed")
+
+        from scripts.utils.discovery import discover_source_files
+        from scripts.utils.parsers import c_family
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_dir = Path(tmpdir)
+            (temp_dir / "src").mkdir()
+            (temp_dir / "include").mkdir()
+            (temp_dir / "src" / "main.cpp").write_text(
+                '#include "main.hpp"\nnamespace demo { int run() { return 1; } }\n',
+                encoding="utf-8",
+            )
+            (temp_dir / "include" / "main.hpp").write_text(
+                "#define MAX_VALUE 5\nnamespace demo { class Widget {}; typedef unsigned int DWORD; }\n",
+                encoding="utf-8",
+            )
+            (temp_dir / "src" / "decoder.asm").write_text(
+                "Decoder PROC\n mov eax, 1\nDecoder ENDP\nSharedLabel:\n ret\n",
+                encoding="utf-8",
+            )
+
+            discovered = discover_source_files([str(temp_dir)], max_files=20)
+            c_family_files = [
+                item for item in discovered["files"]
+                if item["metadata"]["parser_key"] == "c_family"
+            ]
+            c_family._load_tree_sitter_language_pack.cache_clear()
+            c_family._get_tree_sitter_parser.cache_clear()
+            parsed = c_family.parse_c_family_corpus(c_family_files, bundle_max_chars=6000)
+
+        symbol_names = {item["metadata"]["symbol_name"] for item in parsed["units"]}
+        self.assertIn("demo::run", symbol_names)
+        self.assertIn("demo::Widget", symbol_names)
+        self.assertIn("MAX_VALUE", symbol_names)
+        self.assertIn("demo::DWORD", symbol_names)
+        self.assertIn("Decoder", symbol_names)
+        self.assertIn("SharedLabel", symbol_names)
+        self.assertTrue(parsed["units"])
+        self.assertTrue(all(item["metadata"]["parser_mode"] == "tree_sitter" for item in parsed["units"]))
+        bundle = parsed["bundles"][0]
+        self.assertEqual(bundle["metadata"]["parser_mode"], "tree_sitter")
+        self.assertEqual(bundle["metadata"]["parser_modes"][bundle["metadata"]["primary_file"]], "tree_sitter")
 
     def test_article_parser_extracts_html_snippet_with_context(self) -> None:
         from scripts.utils.discovery import discover_source_files

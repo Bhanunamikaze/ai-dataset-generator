@@ -26,6 +26,11 @@ Current V1 parsing coverage:
 - Visual Studio `.sln`, `.vcxproj`, and `.vcxproj.filters`
 - `html`, `htm`, `mhtml`, `md`, and `txt`
 
+Parser selection:
+
+- use tree-sitter-backed symbol extraction for C, C++, and assembly when the optional parser dependency is installed
+- fall back to deterministic regex and project-graph heuristics when it is not
+
 ## Collect Flow
 
 Use this when the user wants source material fetched before drafting training records.

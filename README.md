@@ -16,7 +16,7 @@ The skill operates in a continuous agentic loop, splitting work between reasonin
 
 1. **Strategic Planning**: The agent analyzes your prompt, defines the output schema, sets an SFT or DPO target, and designs a multi-axis taxonomy aimed at long-tail edge cases.
 2. **Research & Seeding**: Adhering to a research-first mandate, the agent fetches real-world examples (via IDE search or web tools) and drafts canonical records with explicit coverage metadata.
-3. **Structured Source Ingestion**: `scripts/ingest.py` can walk local directories, parse supported repos and article files into structured artifacts, keep related files together, and emit bounded bundles plus canonical drafts for local-source dataset building.
+3. **Structured Source Ingestion**: `scripts/ingest.py` can walk local directories, parse supported repos and article files into structured artifacts, prefer tree-sitter-backed C/C++ and assembly parsing when available, keep related files together, and emit bounded bundles plus canonical drafts for local-source dataset building.
 4. **Batch Build Loop**: `scripts/build_loop.py` can import draft batches, reject near-duplicates on import, run verification, and measure coverage after every batch so generation targets the missing buckets instead of overproducing the dominant case.
 5. **Semantic Review**: The host IDE agent applies the `llm-judge` rubric through a `review.jsonl` file. Deterministic scripts gate structure and heuristics first, but semantic pass/fail still comes from the LLM review step.
 6. **Final Audit & Export**: The pipeline performs final deduplication, split-safe export, and corpus-level audit checks such as leakage, taxonomy coverage, balance, and synthetic fingerprints.
@@ -28,7 +28,7 @@ The skill operates in a continuous agentic loop, splitting work between reasonin
 - Shared utility modules: `16`
 - Internal canonical schema: `1`
 - Preset export schemas: `3`
-- Automated tests: `57`
+- Automated tests: `59`
 
 ## Features
 
@@ -62,6 +62,11 @@ Current V1 support includes:
 - Visual Studio `.sln`, `.vcxproj`, and `.vcxproj.filters` project structure
 - `html`, `htm`, and `mhtml` article parsing
 - `md` and `txt` article-style source files
+
+Parser behavior:
+
+- tree-sitter-backed symbol extraction for C, C++, and assembly when `tree-sitter-language-pack` is installed
+- deterministic heuristic fallback when the optional parser dependency is unavailable
 
 The ingest path writes:
 

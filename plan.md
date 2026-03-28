@@ -33,6 +33,7 @@ This path must:
 - Branch setup: `completed`
 - Planning document: `completed`
 - Structured ingestion implementation: `completed`
+- Tree-sitter parser upgrade: `completed`
 
 ## Proposed Architecture
 
@@ -92,6 +93,7 @@ Definitions:
 | SI-10 | Integrate with existing pipeline | import generated drafts through `generate.py`, preserve provenance metadata | `completed` |
 | SI-11 | Add tests and fixtures | C repo fixture, C++ repo fixture, Visual Studio fixture, HTML/MHTML fixture, end-to-end tests | `completed` |
 | SI-12 | Update docs and skill instructions | `README.md`, `docs/workflows.md`, `SKILL.md`, usage examples | `completed` |
+| SI-13 | Add tree-sitter-backed C/C++ and assembly parsing | optional dependency integration, AST symbol extraction, heuristic fallback retention | `completed` |
 
 ## Execution Phases
 
@@ -202,6 +204,12 @@ Status: `completed`
 - binary reverse-engineering
 - full semantic cross-repo call graph construction
 - language support beyond the approved C/C++ and article-focused first pass
+
+## Post-Plan Upgrade
+
+- `SI-13` was added after the initial plan to improve parser fidelity for native code repositories.
+- The ingest path now prefers tree-sitter for `c`, `cpp`, and `asm` symbol extraction and records the parser backend in artifact metadata.
+- Heuristic parsing remains available as the deterministic fallback path when the optional dependency is unavailable.
 
 ## Commit Plan
 
