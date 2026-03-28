@@ -32,7 +32,7 @@ This path must:
 
 - Branch setup: `completed`
 - Planning document: `completed`
-- Structured ingestion implementation: `in_progress`
+- Structured ingestion implementation: `completed`
 
 ## Proposed Architecture
 
@@ -90,8 +90,8 @@ Definitions:
 | SI-08 | Implement HTML/HTM/MHTML parser | DOM cleanup, code block extraction, snippet context windows, provenance capture | `completed` |
 | SI-09 | Add automatic draft generation from bundles | transform `bundles.jsonl` into canonical dataset drafts for downstream pipeline use | `completed` |
 | SI-10 | Integrate with existing pipeline | import generated drafts through `generate.py`, preserve provenance metadata | `completed` |
-| SI-11 | Add tests and fixtures | C repo fixture, C++ repo fixture, Visual Studio fixture, HTML/MHTML fixture, end-to-end tests | `in_progress` |
-| SI-12 | Update docs and skill instructions | `README.md`, `docs/workflows.md`, `SKILL.md`, usage examples | `pending` |
+| SI-11 | Add tests and fixtures | C repo fixture, C++ repo fixture, Visual Studio fixture, HTML/MHTML fixture, end-to-end tests | `completed` |
+| SI-12 | Update docs and skill instructions | `README.md`, `docs/workflows.md`, `SKILL.md`, usage examples | `completed` |
 
 ## Execution Phases
 
@@ -170,7 +170,7 @@ Tasks:
 - `SI-11`
 - `SI-12`
 
-Status: `in_progress`
+Status: `completed`
 
 ## V1 Parsing Rules
 

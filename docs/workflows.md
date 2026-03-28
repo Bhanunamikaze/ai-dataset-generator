@@ -1,5 +1,30 @@
 # Workflow Notes
 
+## Structured Ingest Flow
+
+Use this when the user already has a local directory or file set and wants an automated structured parsing path instead of the raw chunk collector.
+
+1. Run `scripts/ingest.py`:
+   ```bash
+   python3 scripts/ingest.py --paths ./repo ./articles --tool-context codex
+   ```
+2. The ingest path discovers supported local sources and writes:
+   - `manifest.json`
+   - `files.jsonl`
+   - `units.jsonl`
+   - `relations.jsonl`
+   - `bundles.jsonl`
+   - `drafts.jsonl`
+   - `ingest_report.json`
+3. Drafts are imported into SQLite automatically as `structured_source` records unless `--drafts-only` is used.
+4. Continue with verify → dedup → export, or rewrite/augment the imported records through the host IDE agent if the user wants higher-variance training outputs.
+
+Current V1 parsing coverage:
+
+- C/C++ source and header files
+- Visual Studio `.sln`, `.vcxproj`, and `.vcxproj.filters`
+- `html`, `htm`, `mhtml`, `md`, and `txt`
+
 ## Collect Flow
 
 Use this when the user wants source material fetched before drafting training records.
@@ -147,6 +172,7 @@ Options:
 - `url_reference`: records derived from user-provided URLs or reference documents
 - `raw_dataset`: records imported from existing datasets
 - `internet_research`: records built from material gathered via browsing/search
+- `structured_source`: records built from parsed local directories, repos, and article files
 
 ## Custom Flat Schema
 

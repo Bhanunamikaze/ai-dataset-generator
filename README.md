@@ -16,23 +16,25 @@ The skill operates in a continuous agentic loop, splitting work between reasonin
 
 1. **Strategic Planning**: The agent analyzes your prompt, defines the output schema, sets an SFT or DPO target, and designs a multi-axis taxonomy aimed at long-tail edge cases.
 2. **Research & Seeding**: Adhering to a research-first mandate, the agent fetches real-world examples (via IDE search or web tools) and drafts canonical records with explicit coverage metadata.
-3. **Batch Build Loop**: `scripts/build_loop.py` can import draft batches, reject near-duplicates on import, run verification, and measure coverage after every batch so generation targets the missing buckets instead of overproducing the dominant case.
-4. **Semantic Review**: The host IDE agent applies the `llm-judge` rubric through a `review.jsonl` file. Deterministic scripts gate structure and heuristics first, but semantic pass/fail still comes from the LLM review step.
-5. **Final Audit & Export**: The pipeline performs final deduplication, split-safe export, and corpus-level audit checks such as leakage, taxonomy coverage, balance, and synthetic fingerprints.
+3. **Structured Source Ingestion**: `scripts/ingest.py` can walk local directories, parse supported repos and article files into structured artifacts, keep related files together, and emit bounded bundles plus canonical drafts for local-source dataset building.
+4. **Batch Build Loop**: `scripts/build_loop.py` can import draft batches, reject near-duplicates on import, run verification, and measure coverage after every batch so generation targets the missing buckets instead of overproducing the dominant case.
+5. **Semantic Review**: The host IDE agent applies the `llm-judge` rubric through a `review.jsonl` file. Deterministic scripts gate structure and heuristics first, but semantic pass/fail still comes from the LLM review step.
+6. **Final Audit & Export**: The pipeline performs final deduplication, split-safe export, and corpus-level audit checks such as leakage, taxonomy coverage, balance, and synthetic fingerprints.
 
 ## Current Inventory
 
 - Specialized sub-skills: `12`
-- Pipeline entry scripts: `8`
-- Shared utility modules: `9`
+- Pipeline entry scripts: `9`
+- Shared utility modules: `16`
 - Internal canonical schema: `1`
 - Preset export schemas: `3`
-- Automated tests: `48`
+- Automated tests: `57`
 
 ## Features
 
 | Capability | Description |
 |-----------|-------------|
+| `dataset ingest` | Parse local directories, code repos, and article files into structured artifacts, bounded bundles, canonical drafts, and imported `structured_source` records |
 | `dataset collect` | Fetch content from web searches (5-backend fallback chain), explicit URLs, or local files/repos and emit canonical JSONL for agent-driven dataset creation |
 | `dataset generate` | Topic-driven generation, URL/reference structuring, web-research capture, or raw dataset normalization into canonical records with effective-count and coverage steering |
 | `dataset verify` | Heuristic checks, required-field/provenance enforcement, review-file adjudication, and audit-friendly DB-backed verification |
@@ -48,6 +50,35 @@ The skill operates in a continuous agentic loop, splitting work between reasonin
 | `formatter-exporter` | Preset and custom flat-schema mapping for final user-facing outputs |
 | `dataset-auditor` | Evaluates full corpora for synthetic contamination, context leakage, balanced coverage, and holdout contamination |
 | `local-collector` | Sub-skill that routes collection through IDE-native tools first, then falls back to `scripts/collect.py` |
+
+## Structured Source Ingestion
+
+Use `scripts/ingest.py` when the user already has a local directory of source material and wants an automated local parsing path instead of raw chunk collection.
+
+Current V1 support includes:
+
+- C and C++ source/header repos
+- Visual Studio `.sln`, `.vcxproj`, and `.vcxproj.filters` project structure
+- `html`, `htm`, and `mhtml` article parsing
+- `md` and `txt` article-style source files
+
+The ingest path writes:
+
+- discovered source files with hashes and provenance
+- parsed units such as symbols and code snippets
+- relations such as includes, project membership, and snippet provenance
+- bounded bundles for downstream drafting
+- canonical drafts imported as `structured_source` records
+
+Example:
+
+```bash
+python3 scripts/ingest.py \
+  --paths ./my-repo ./notes \
+  --tool-context codex
+```
+
+This creates artifacts under `workspace/ingest_runs/<run_id>/` and imports the generated drafts into SQLite by default.
 
 
 ## Installation (All IDEs)
@@ -191,6 +222,7 @@ You do not need to use explicit flags or command syntax. Natural-language prompt
 |-------------|-------|-------|------------------|
 | `Generate a medical triage dataset` | topic-driven generation | default-size generation | strategy -> seed -> build_loop -> export |
 | `Generate a 2000-example customer support dataset in OpenAI JSONL` | topic-driven generation | user-sized generation | strategy -> seed -> build_loop -> export |
+| `Turn this local repo directory into a dataset` | structured local-source ingestion | structured ingest | ingest -> verify -> dedup -> export |
 | `Turn these URLs into a training dataset` | URL/reference structuring | source-to-dataset conversion | strategy -> seed -> build_loop -> export |
 | `Use web research to build a fintech FAQ dataset` | internet-research generation | research-driven generation | strategy -> seed -> build_loop -> export |
 | `Normalize this CSV into OpenAI JSONL` | existing-dataset normalization | import and reshape | strategy -> seed -> verify -> export |
@@ -220,6 +252,11 @@ Ensure the dataset covers diverse real-world scenarios like asynchronous task ca
 **Dataset Normalization / Import**
 ```text
 Normalize this CSV into HuggingFace chat format and deduplicate it.
+```
+
+**Structured Local Source Ingestion**
+```text
+Turn this C++ repo and article folder into a structured training dataset and export it as JSONL.
 ```
 
 **Audit and Export**

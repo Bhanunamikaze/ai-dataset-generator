@@ -13,6 +13,7 @@ This skill is a tool-native dataset pipeline for Codex, Antigravity, and Claude 
 
 ## Command surface
 
+- `dataset ingest [--paths ./dir ./file]`
 - `dataset generate "<request>" [--count <n>]`
 - `dataset collect "<topic or query>" [--urls url1 url2] [--paths ./dir]`
 - `dataset verify <path/to/file>`
@@ -40,7 +41,36 @@ Read `sub-skills/dataset-strategy.md` first whenever the target output schema is
 
 ## Workflow selection
 
-### 1. `dataset generate`
+### 1. `dataset ingest`
+
+Use this when the user already has a local directory or file set containing code repos, source files, articles, or mixed local reference material and wants the local sources turned into a dataset automatically.
+
+Run:
+
+```bash
+python3 scripts/ingest.py --paths <path1> [path2 ...] --tool-context <codex|claude|antigravity>
+```
+
+Behavior:
+
+- discovers supported local source files
+- preserves hashes, provenance, and relative paths
+- parses C/C++ source and header files together
+- parses Visual Studio `.sln`, `.vcxproj`, and `.vcxproj.filters` structure without compiling
+- extracts code snippets and surrounding context from `html`, `htm`, `mhtml`, `md`, and `txt`
+- writes parsed artifacts under `workspace/ingest_runs/<run_id>/`
+- emits `drafts.jsonl`
+- imports the drafts into SQLite as `structured_source` records unless `--drafts-only` is used
+
+The ingest path is deterministic and bounded. It does not call provider APIs.
+
+After ingest completes:
+
+1. inspect `ingest_report.json` for warnings and unresolved relations
+2. continue with verify → dedup → export as needed
+3. if the user wants higher-quality reasoning variation, use the host IDE agent to rewrite or augment the imported `structured_source` records before export
+
+### 2. `dataset generate`
 
 Use this when the user wants a new dataset or wants source material structured into one.
 
@@ -87,6 +117,15 @@ If there is a relevant unfinished or recent run, ask whether to resume or start 
     ```
   - The collector outputs `workspace/collected_<timestamp>.jsonl`; the agent then drafts proper instruction/response records and imports them with `--source-type internet_research`.
   - If the user does not specify a size, continue collecting and drafting until `500` records are planned or imported.
+- Structured local-source ingestion:
+  - Prefer `scripts/ingest.py` over `scripts/collect.py` when the input is an existing local directory of code repos, source files, or article files.
+  - Run:
+    ```bash
+    python3 scripts/ingest.py --paths <path1> [path2 ...] --tool-context <context>
+    ```
+  - The ingest path writes parsed artifacts, bundles, and canonical drafts under `workspace/ingest_runs/<run_id>/`.
+  - Drafts are imported as `structured_source` records automatically unless `--drafts-only` is used.
+  - Continue with verify, dedup, and export if the user wants a deterministic pass, or augment/rewrite through the host IDE agent if higher-variety training examples are needed.
 
 4. Load draft records into SQLite:
 
@@ -180,7 +219,7 @@ The final dedup pass still runs before export, but it is not a substitute for ge
 python3 scripts/export.py --format <openai|huggingface|csv|jsonl|all> [--schema-file <schema.json>] [--split 0.1] [--plan-file <coverage_plan.json>]
 ```
 
-### 2. `dataset verify`
+### 3. `dataset verify`
 
 Use this when the user already has a file and wants an audit or cleanup pass.
 
@@ -197,7 +236,7 @@ Prefer the DB-backed route above so the audit remains resumable and traceable.
 
 For intentionally adversarial security corpora, injection-tolerant import is now the default. Add `--enforce-security-flags` only when you want strict flagging on those records.
 
-### 3. `dataset audit`
+### 4. `dataset audit`
 
 Use this when the user wants a structured quality assessment of an existing or freshly generated dataset.
 
@@ -209,7 +248,7 @@ Read `sub-skills/dataset-auditor.md`. The auditor runs three phases:
 
 No additional scripts are required — the auditor drives the existing `verify.py`, `dedup.py`, and `export.py` scripts and reasons over their outputs.
 
-### 4. `dataset export`
+### 5. `dataset export`
 
 Use this when the verified data already exists in SQLite and the user wants a specific output shape.
 
@@ -235,6 +274,7 @@ Users do not need to use explicit flags if they describe the task naturally.
 
 - `Generate a medical triage dataset`
 - `Generate a 2000-example customer-support dataset in OpenAI JSONL`
+- `Turn this local repo directory into a structured dataset`
 - `Turn these URLs into a structured dataset for fine-tuning`
 - `Use web research to build a fintech FAQ dataset`
 - `Normalize this CSV into HuggingFace chat format`

@@ -54,6 +54,7 @@ Responsibilities:
 ## 3. Deterministic Script Layer
 
 - [`scripts/generate.py`](../scripts/generate.py)
+- [`scripts/ingest.py`](../scripts/ingest.py)
 - [`scripts/build_loop.py`](../scripts/build_loop.py)
 - [`scripts/coverage.py`](../scripts/coverage.py)
 - [`scripts/augment.py`](../scripts/augment.py)
@@ -65,6 +66,7 @@ Responsibilities:
 Responsibilities:
 
 - normalize/import canonical records
+- discover and parse structured local source material into files, units, relations, bundles, and canonical drafts
 - orchestrate batch-wise quality loops across generate -> verify -> dedup -> coverage -> export
 - measure effective post-dedup count, bucket gaps, joint-bucket skew, provenance, response-length drift, response-structure collapse, response-prefix repetition, and metadata completeness during generation
 - manage resumable SQLite state
@@ -73,10 +75,12 @@ Responsibilities:
 - sanitize model-visible `instruction` and `context` during export when the plan defines `model_visibility`
 - export into fixed presets or custom flat schemas
 - collect and chunk content from web searches, URLs, and local files (`collect.py`)
+- preserve structured local source context for code repos and article files (`ingest.py`)
 
 ## 4. Resources and Workspace
 
 - canonical schema: [`resources/internal-schema/canonical_schema.json`](../resources/internal-schema/canonical_schema.json)
+- source artifact schema: [`resources/internal-schema/source_artifact_schema.json`](../resources/internal-schema/source_artifact_schema.json)
 - preset export schemas: [`resources/target-schemas/`](../resources/target-schemas/)
 - custom schema starter: [`resources/templates/custom_flat_schema.json`](../resources/templates/custom_flat_schema.json)
 - audit/export references: [`resources/references/`](../resources/references/)
